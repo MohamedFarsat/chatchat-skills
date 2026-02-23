@@ -52,15 +52,3 @@ Common categories you’ll see:
 - Tools
 
 Use the most specific, user-friendly category that matches the skill’s primary intent. If a skill spans multiple domains, pick the category users would most likely search.
-
-## Available Skills
-
-| Skill | Category | Description |
-|-------|----------|-------------|
-| `prep-meeting` | Productivity | Prepare for a meeting with goals, agenda, and questions |
-| `contract-review` | Productivity | Review contracts for key risks and obligations |
-| `draft-reply` | Communication | Draft professional replies to messages |
-| `summarize-thread` | Communication | Summarize conversation threads |
-| `weekly-update` | Productivity | Generate weekly status updates |
-| `build-app` | Development | Build and deploy apps via GitHub |
-| `meeting-notes` | Productivity | Create meeting summaries with action items and decisions |
