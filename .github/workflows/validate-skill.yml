@@ -21,13 +21,17 @@ jobs:
         uses: tj-actions/changed-files@v44
         with:
           files: 'skills/**/SKILL.md'
+          separator: "\n"
 
       - name: Validate SKILL.md files
         if: steps.changed.outputs.any_changed == 'true'
         run: |
           ERRORS=0
 
-          for file in ${{ steps.changed.outputs.all_changed_files }}; do
+          while IFS= read -r file; do
+            if [ -z "$file" ]; then
+              continue
+            fi
             echo "Validating: $file"
 
             # Check file exists and is not empty
@@ -116,7 +120,7 @@ jobs:
             fi
 
             echo "  -> Validation passed for $file"
-          done
+          done <<< "${{ steps.changed.outputs.all_changed_files }}"
 
           if [ "$ERRORS" -gt 0 ]; then
             echo "::error::$ERRORS validation error(s) found"
