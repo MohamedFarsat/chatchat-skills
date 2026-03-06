@@ -6,7 +6,7 @@ description: >
   unit tests, integration tests, upgrade tests, gas profiling, edge cases,
   and test-driven development patterns using Hardhat and Chai. Use when
   writing, running, or debugging tests for BAP-578 contracts.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

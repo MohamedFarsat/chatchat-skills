@@ -7,7 +7,7 @@ description: >
   responses, DeFi actions, scheduled tasks, and cross-agent interactions.
   Covers architecture, Solidity patterns, binding via setLogicAddress,
   security considerations, and example implementations.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

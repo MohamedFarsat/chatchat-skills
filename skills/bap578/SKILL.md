@@ -8,7 +8,7 @@ description: >
   implementation (ERC-721, UUPS upgradeable, structured metadata, agent fund
   management). Use when asked about BAP-578, NFA, agent NFTs, or agent
   identity on BNB Chain.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

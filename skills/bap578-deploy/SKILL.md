@@ -6,7 +6,7 @@ description: >
   Covers environment setup, Hardhat configuration, proxy deployment via
   UUPS, BscScan verification, post-deployment checks, and operational
   runbook. Use when deploying, verifying, or configuring a BAP-578 contract.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

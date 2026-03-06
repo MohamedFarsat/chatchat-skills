@@ -7,7 +7,7 @@ description: >
   creates value for end users, enterprises, developers, and investors — no code,
   purely business. Use when pitching, planning partnerships, evaluating use cases,
   or explaining the business value of on-chain agent identity.
-category: Business
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

@@ -7,7 +7,7 @@ description: >
   TVL, user growth, engagement metrics, and event history using The Graph,
   custom indexers, or direct RPC queries. Use when analyzing NFA data or
   building monitoring tools.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

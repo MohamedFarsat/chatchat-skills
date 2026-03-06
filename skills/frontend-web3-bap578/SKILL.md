@@ -7,7 +7,7 @@ description: >
   BNB Chain setup, contract ABI integration, React hooks for minting, funding,
   withdrawing, metadata management, and agent identity display. Use when
   building a Web3 UI for BAP-578 or integrating NFA into an existing Next.js app.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

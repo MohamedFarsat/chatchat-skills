@@ -7,7 +7,7 @@ description: >
   struct fields, JSON persona format, vault architecture, IPFS storage,
   and metadata best practices. Use when creating or customizing NFA agent
   identities.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

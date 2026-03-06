@@ -7,7 +7,7 @@ description: >
   deployment, state preservation verification, rollback planning, and
   governance best practices. Use when upgrading or planning upgrades to a
   deployed BAP-578 contract.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

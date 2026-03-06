@@ -7,7 +7,7 @@ description: >
   on BNB Chain. Covers free-mint funnels, fee structures, agent marketplaces,
   revenue streams, and operational economics. Use when planning the commercial
   side of an NFA deployment.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

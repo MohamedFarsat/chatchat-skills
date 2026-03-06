@@ -6,7 +6,7 @@ description: >
   Look up agents by token ID or owner, verify contract source, audit event
   history, check vault integrity, monitor agent activity, and detect risks.
   Use when investigating, verifying, or analyzing NFA agents on-chain.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:

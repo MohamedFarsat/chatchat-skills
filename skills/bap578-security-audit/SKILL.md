@@ -6,7 +6,7 @@ description: >
   BAP-578 Non-Fungible Agents on BNB Chain. Covers reentrancy, access control,
   upgrade safety, fund management risks, logic contract threats, and off-chain
   data integrity. Use when auditing, reviewing, or hardening a BAP-578 deployment.
-category: Development
+category: BAP-578
 author: community
 version: 1.0.0
 examples:
