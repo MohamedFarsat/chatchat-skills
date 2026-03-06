@@ -4,9 +4,7 @@ name: BAP-578 Metadata & Persona Design
 description: >
   Design agent personas, experiences, vault schemas, voice profiles, and
   metadata URIs for BAP-578 Non-Fungible Agents. Covers the AgentMetadata
-  struct fields, JSON persona format, vault architecture, IPFS storage,
-  and metadata best practices. Use when creating or customizing NFA agent
-  identities.
+  fields, persona format, vault integrity, and best practices.
 category: BAP-578
 author: community
 version: 1.0.0
@@ -21,300 +19,497 @@ examples:
 
 # BAP-578 Metadata & Persona Design
 
-Use this skill when designing, creating, or customizing the identity and data layer for BAP-578 Non-Fungible Agents. This covers every field in the `AgentMetadata` struct, persona JSON schemas, vault architecture, voice profiles, animation resources, and IPFS storage patterns.
+Use this skill to craft the identity data stored in `AgentMetadata`. This covers every field in the metadata struct, persona design patterns, vault architecture, voice profile integration, animation assets, and best practices for building rich, verifiable agent identities.
 
 ---
 
-## The Four Identity Questions — Metadata Perspective
+## When to use this skill
 
-### 1 · Who are you?
+- Designing the persona and experience text for a new agent.
+- Structuring the vault content and computing the vault hash.
+- Choosing storage strategies for metadata URIs (IPFS, Arweave, centralized).
+- Creating persona templates for different use cases (finance, education, creative).
+- Setting up voice profiles and animation assets.
+- Planning metadata evolution strategies (how agents grow over time).
+- Verifying metadata integrity after updates.
 
-I am the **identity designer** for BAP-578 agents. I answer the most fundamental question an agent faces: **"Who are you, exactly?"**
+---
 
-The `AgentMetadata` struct is the agent's soul — six fields that define its character, knowledge, voice, appearance, and extended memory:
+## The Four Identity Questions (Metadata View)
+
+### 1) Who are you?
+
+Persona and experience define who the agent is. The persona is a JSON-encoded character definition that captures personality traits, communication style, tone, language preferences, greeting behavior, and boundaries. The experience is a plain-text summary of the agent's domain expertise. Together they answer "who are you?" in a structured, parseable way.
+
+A well-designed persona should be:
+- **Distinctive** — clearly different from other agents
+- **Consistent** — behavior follows from defined traits
+- **Bounded** — explicit about what it will and won't do
+- **Parseable** — structured JSON that code can interpret
+
+### 2) What do you remember?
+
+`vaultURI` and `vaultHash` anchor extended memory. The vault is the agent's long-term memory layer — it can contain conversation summaries, learned preferences, knowledge bases, configuration files, or any structured data the agent needs to persist between sessions.
+
+The memory model is:
+- **On-chain metadata** — always authoritative, always available
+- **Vault content** — extended memory, verifiable via hash
+- **Event history** — immutable record of all changes
+
+### 3) What can you do?
+
+Metadata updates allow evolving identity over time. An agent can:
+- Update its persona (new traits, refined behavior)
+- Change its experience description (expanded expertise)
+- Rotate vault content (new knowledge, updated preferences)
+- Update animation and voice assets
+- All changes are tracked via `MetadataUpdated` events
+
+### 4) How can I trust it?
+
+Hash-verified vault content proves integrity. The trust mechanism is:
+1. Content is created and stored at `vaultURI`.
+2. `keccak256` hash of the content is computed.
+3. Hash is stored on-chain as `vaultHash`.
+4. Any reader can fetch content, hash it, and compare to on-chain hash.
+5. If they match, the content is authentic. If not, it's been tampered with.
+
+---
+
+## AgentMetadata Struct
+
+The on-chain metadata structure contains six fields:
 
 ```solidity
 struct AgentMetadata {
-    string persona;       // WHO the agent is (character, style, tone)
-    string experience;    // WHAT the agent knows (role, expertise)
-    string voiceHash;     // HOW the agent sounds (voice profile)
-    string animationURI;  // HOW the agent looks (visual identity)
-    string vaultURI;      // WHERE the agent's extended memory lives
-    bytes32 vaultHash;    // PROOF that the memory is authentic
+    string persona;       // JSON-encoded persona definition
+    string experience;    // Plain-text domain expertise
+    string voiceHash;     // Reference to a voice profile
+    string animationURI;  // Visual asset URI
+    string vaultURI;      // Extended memory URI
+    bytes32 vaultHash;    // keccak256 hash of vault content
 }
 ```
 
-**In short:** "I design who the agent is, what it knows, how it presents itself, and where its deeper memory lives."
+### Field-by-field guide
 
-### 2 · What do you remember?
+**persona** (string — JSON recommended)
 
-I define and structure **what an agent remembers** across two layers:
+The persona field defines the agent's character. While it's a free-form string, JSON is strongly recommended for parseability.
 
-| Layer | Fields | Storage | Mutable |
-|-------|--------|---------|---------|
-| On-chain identity | `persona`, `experience`, `voiceHash` | Contract state | Yes (by owner via `updateAgentMetadata`) |
-| On-chain references | `animationURI`, `vaultURI`, `vaultHash` | Contract state | Yes (by owner) |
-| Off-chain profile | tokenURI JSON document | IPFS / Arweave | Yes (URI update) |
-| Off-chain vault | Extended data at `vaultURI` | IPFS / Arweave / custom | Yes (content + hash update) |
-
-**Memory architecture:**
-
-```
-Agent #42 Memory Map
-├── ON-CHAIN (immutable history via events)
-│   ├── persona: {"traits": ["analytical"], "style": "formal"}
-│   ├── experience: "Financial advisor specializing in DeFi"
-│   ├── voiceHash: "voice_pro_financial_001"
-│   ├── animationURI: "ipfs://QmAnimation..."
-│   ├── vaultURI: "ipfs://QmVault..."
-│   └── vaultHash: 0xabc123...
-│
-└── OFF-CHAIN (referenced, hash-verified)
-    ├── tokenURI JSON → full profile, image, attributes
-    └── vaultURI → conversation history, learned preferences,
-                   extended knowledge base, user interactions
-```
-
-### 3 · What can you do?
-
-I design metadata for any agent archetype. Here's how each field works:
-
-#### `persona` — Character Definition
-
-JSON-encoded string defining the agent's personality. Recommended schema:
+Recommended JSON schema:
 
 ```json
 {
-  "traits": ["helpful", "analytical", "patient"],
-  "style": "professional yet approachable",
-  "tone": "warm and engaging",
+  "name": "Atlas",
+  "traits": ["analytical", "patient", "thorough"],
+  "style": "professional",
+  "tone": "calm and measured",
   "language": "en",
-  "greeting": "Hello! I'm your financial advisor agent.",
-  "boundaries": ["no medical advice", "no legal counsel"],
-  "quirks": ["uses analogies from nature", "ends sessions with a summary"]
+  "greeting": "Hello, I'm Atlas. How can I help you analyze this?",
+  "boundaries": [
+    "I don't provide medical advice",
+    "I don't execute trades directly",
+    "I always cite my sources"
+  ],
+  "quirks": [
+    "Summarizes key points at the end of long responses",
+    "Uses bullet points for complex topics",
+    "Asks clarifying questions before diving deep"
+  ],
+  "specialization": "financial analysis and market research"
 }
 ```
 
-**Persona templates by archetype:**
+**Persona design principles:**
 
-| Archetype | Traits | Style | Tone |
-|-----------|--------|-------|------|
-| Financial advisor | analytical, precise, cautious | formal | confident |
-| Creative writer | imaginative, expressive, playful | casual | enthusiastic |
-| Code reviewer | meticulous, direct, constructive | technical | neutral |
-| Customer support | empathetic, patient, solution-oriented | friendly | warm |
-| Research analyst | thorough, objective, detail-oriented | academic | measured |
-| Personal coach | motivating, supportive, challenging | conversational | energetic |
-| Translator | accurate, culturally aware, adaptive | clear | neutral |
-| Game master | dramatic, creative, fair | narrative | theatrical |
+1. **Be specific about traits.** "Helpful" is vague. "Responds with step-by-step breakdowns and always asks if the user needs more detail" is actionable.
 
-#### `experience` — Role Summary
+2. **Define boundaries explicitly.** What the agent won't do is as important as what it will do. Boundaries prevent misuse and set user expectations.
 
-Short plain-text string (not JSON). Should be a one-line elevator pitch:
+3. **Include communication style.** Tone, formality level, use of emoji, response length preferences — these shape the user experience.
 
+4. **Add quirks for distinctiveness.** Small behavioral details make agents feel unique and memorable.
+
+5. **Keep it parseable.** Applications that interact with the agent can read the persona JSON and adapt their behavior accordingly.
+
+**experience** (string — plain text)
+
+A concise summary of the agent's domain expertise. Keep under 200 characters for display purposes.
+
+Examples:
+- "Senior financial analyst specializing in DeFi protocols and yield strategies"
+- "Creative writing assistant focused on sci-fi world-building"
+- "Customer support agent for Web3 applications with 24/7 availability"
+- "Legal research assistant for smart contract compliance"
+- "Data scientist specializing in on-chain analytics and visualization"
+
+**voiceHash** (string)
+
+A reference to a voice profile. This could be:
+- A hash of a voice model file
+- An identifier for a text-to-speech voice
+- A reference to a voice cloning profile
+- Empty string if no voice is configured
+
+Use case: When the agent is used in voice-enabled applications, this field tells the application which voice to use.
+
+**animationURI** (string)
+
+URI pointing to a visual asset for the agent. This could be:
+- A profile image (PNG, SVG, WebP)
+- An animated avatar (GIF, Lottie JSON)
+- A 3D model reference
+- A generative art seed
+
+Storage recommendations:
+- Use IPFS for immutable assets: `ipfs://QmHash...`
+- Use Arweave for permanent storage: `ar://txid...`
+- Centralized URLs work but are less durable
+
+**vaultURI** (string)
+
+URI pointing to the agent's extended memory vault. The vault can contain any structured data the agent needs.
+
+**vaultHash** (bytes32)
+
+The keccak256 hash of the content at `vaultURI`. This is the integrity anchor. If no vault content exists, use the zero hash: `0x0000000000000000000000000000000000000000000000000000000000000000`.
+
+---
+
+## Dual-Path Memory Architecture
+
+BAP-578 supports two memory paths. Choose based on whether your agent needs to learn and evolve:
+
+### Path 1: JSON Light Memory (Simple Agents)
+
+For agents that don't need to evolve. Vault stores static or manually-updated JSON:
+
+- `vaultURI` → IPFS CID pointing to a JSON document
+- `vaultHash` → `keccak256(JSON content)` for integrity verification
+- Content is updated manually via `updateAgentMetadata`
+- Suitable for bots, static assistants, configuration-driven agents
+
+### Path 2: Merkle Tree Learning (Evolving Agents)
+
+For agents that learn from interactions. Learning data is organized into a Merkle tree:
+
+- `vaultHash` → **Merkle root** (32 bytes) of the learning tree
+- `vaultURI` → URI pointing to the full tree data (off-chain)
+- Individual learning nodes can be verified via Merkle proofs without revealing the entire tree
+- Learning pipeline: `interaction → extraction → tree building → Merkle root → on-chain update`
+
+**Merkle tree structure for learning data:**
+
+```json
+{
+  "treeVersion": "1.0",
+  "root": "0xabc123...",
+  "nodes": [
+    {
+      "id": "pref-001",
+      "category": "preferences",
+      "data": {"responseLength": "detailed", "citationStyle": "inline"},
+      "confidence": 0.92,
+      "updatedAt": "2026-03-06T10:00:00Z"
+    },
+    {
+      "id": "pattern-001",
+      "category": "patterns",
+      "data": {"topic": "DeFi yields", "frequencyPerWeek": 5},
+      "confidence": 0.85,
+      "updatedAt": "2026-03-05T14:00:00Z"
+    },
+    {
+      "id": "outcome-001",
+      "category": "outcomes",
+      "data": {"actionId": "analysis-042", "reward": 4.5, "feedback": "Very helpful"},
+      "confidence": 1.0,
+      "updatedAt": "2026-03-06T08:00:00Z"
+    }
+  ]
+}
 ```
-"Financial advisor specializing in DeFi yield strategies and risk management"
-"Senior code reviewer for TypeScript, Rust, and Solidity projects"
-"Creative writing coach with expertise in science fiction world-building"
-"Multilingual customer support agent for SaaS products (EN/ES/FR/DE)"
+
+**Building and verifying the Merkle tree:**
+
+```js
+const { keccak256, toUtf8Bytes } = require("ethers");
+
+function buildMerkleTree(nodes) {
+  // Hash each leaf
+  let leaves = nodes.map(n => keccak256(toUtf8Bytes(JSON.stringify(n))));
+  
+  // Build tree bottom-up
+  while (leaves.length > 1) {
+    const nextLevel = [];
+    for (let i = 0; i < leaves.length; i += 2) {
+      const left = leaves[i];
+      const right = i + 1 < leaves.length ? leaves[i + 1] : left;
+      const pair = left < right ? left + right.slice(2) : right + left.slice(2);
+      nextLevel.push(keccak256(toUtf8Bytes(pair)));
+    }
+    leaves = nextLevel;
+  }
+  
+  return leaves[0]; // Merkle root
+}
+
+// Store this root as vaultHash on-chain
+const root = buildMerkleTree(learningNodes);
+await nfa.updateAgentMetadata(tokenId, newURI, { ...metadata, vaultHash: root });
 ```
 
-**Best practices:**
-- Keep under 200 characters.
-- Lead with the role, then specialization.
-- Include domain keywords for discoverability.
+---
 
-#### `voiceHash` — Audio Profile
+## Vault Architecture
 
-Reference ID pointing to a stored voice profile (TTS model, voice clone, etc.):
+### What goes in the vault?
 
-```
-"voice_default"           — Platform default
-"voice_pro_financial_001" — Professional financial tone
-"voice_casual_creative"   — Casual creative tone
-"elevenlabs_abc123"       — ElevenLabs voice clone ID
-"custom_v2_deepvoice"     — Custom trained model
-```
-
-**Note:** The voiceHash is a reference, not the audio itself. The consuming application resolves it.
-
-#### `animationURI` — Visual Identity
-
-URI pointing to the agent's visual representation:
-
-```
-"ipfs://QmAnimation..."         — IPFS-hosted animation/video
-"ar://txid123"                  — Arweave permanent storage
-"https://cdn.nfa.xyz/agent42/"  — CDN-hosted asset
-""                              — No animation (empty string)
-```
-
-Supported formats (by convention): MP4, WebM, Lottie JSON, GIF, GLTF (3D).
-
-#### `vaultURI` — Extended Memory
-
-URI pointing to the agent's extended data vault:
-
-```
-"ipfs://QmVaultData..."     — IPFS-hosted vault
-"ar://vaultTxId"            — Arweave permanent vault
-""                          — No vault (empty string)
-```
-
-**Vault content schema (recommended):**
+The vault is the agent's extended memory. Recommended contents:
 
 ```json
 {
   "version": "1.0",
-  "agentId": 42,
-  "createdAt": "2026-01-15T14:30:00Z",
-  "updatedAt": "2026-03-01T10:00:00Z",
+  "lastUpdated": "2026-03-06T10:00:00Z",
   "knowledge": {
-    "domain": "DeFi yield optimization",
-    "sources": ["Aave docs", "Compound whitepaper", "Uniswap V3 research"],
-    "lastTrainingDate": "2026-02-15"
-  },
-  "conversations": {
-    "totalSessions": 150,
-    "summaries": [
-      {"date": "2026-02-28", "topic": "yield farming on Aave V3", "outcome": "strategy recommended"}
-    ]
+    "domain": "financial analysis",
+    "sources": ["market data feeds", "SEC filings", "DeFi protocol docs"],
+    "specialTopics": ["yield farming", "liquidity provision", "risk assessment"]
   },
   "preferences": {
-    "riskTolerance": "medium",
-    "preferredProtocols": ["Aave", "Compound", "Curve"],
-    "communicationStyle": "detailed with charts"
+    "responseLength": "detailed",
+    "citationStyle": "inline",
+    "confidenceThreshold": 0.8
   },
-  "customData": {}
+  "conversationSummaries": [
+    {
+      "date": "2026-03-01",
+      "topic": "ETH yield strategy review",
+      "keyPoints": ["Discussed Aave vs Compound rates", "User prefers low-risk"],
+      "userPreferences": ["Prefers conservative strategies"]
+    }
+  ],
+  "learnedFacts": [
+    "User is based in Singapore timezone",
+    "User manages a $50K DeFi portfolio",
+    "User prefers weekly summary reports"
+  ],
+  "configuration": {
+    "maxResponseTokens": 2000,
+    "enabledTools": ["calculator", "chart-generator"],
+    "dataRefreshInterval": "daily"
+  }
 }
 ```
 
-#### `vaultHash` — Integrity Anchor
+### Vault storage strategies
 
-`bytes32` keccak256 hash of the vault content. Computed as:
+**IPFS (recommended for most cases)**
 
-```javascript
-// JavaScript (ethers.js)
-const vaultHash = ethers.utils.keccak256(
-  ethers.utils.toUtf8Bytes(JSON.stringify(vaultContent))
-);
+Pros: Content-addressed, decentralized, widely supported.
+Cons: Requires pinning service to persist, not truly permanent without pinning.
 
-// JavaScript (viem)
-import { keccak256, toBytes } from "viem";
-const vaultHash = keccak256(toBytes(JSON.stringify(vaultContent)));
+Workflow:
+1. Create vault JSON content.
+2. Upload to IPFS via pinning service (Pinata, Infura, web3.storage).
+3. Get CID (content identifier).
+4. Set `vaultURI` to `ipfs://CID`.
+5. Compute `keccak256` of the raw JSON content.
+6. Set `vaultHash` on-chain.
+
+**Arweave (for permanent storage)**
+
+Pros: Permanently stored, pay-once model.
+Cons: Higher upfront cost, slower uploads.
+
+**Centralized storage (for development/testing)**
+
+Pros: Fast, easy, familiar.
+Cons: Single point of failure, mutable, less trustworthy.
+
+Use centralized storage for development but plan migration to IPFS/Arweave for production.
+
+### Vault update workflow
+
+When vault content changes:
+
+1. Create new vault content.
+2. Upload to storage (new IPFS CID or new URL).
+3. Compute new `keccak256` hash.
+4. Call `updateAgentMetadata` with new `vaultURI` and `vaultHash`.
+5. Previous vault content remains at old URI (if IPFS) for historical reference.
+6. `MetadataUpdated` event is emitted for tracking.
+
+### Computing vaultHash
+
+**In JavaScript (ethers.js):**
+
+```js
+const { keccak256, toUtf8Bytes } = require("ethers");
+
+const content = JSON.stringify(vaultData);
+const hash = keccak256(toUtf8Bytes(content));
+// hash is a bytes32 hex string like 0xabc123...
 ```
 
-**Rules:**
-- Update `vaultHash` every time vault content changes.
-- If no vault exists, use `bytes32(0)` (64 zero hex chars).
-- Verifier fetches `vaultURI`, hashes content, compares to on-chain `vaultHash`.
+**In JavaScript (viem):**
 
-#### tokenURI JSON — ERC-721 Metadata
+```js
+import { keccak256, toHex } from "viem";
 
-The `tokenURI` returned by `tokenURI(tokenId)` should point to a standard ERC-721 JSON:
+const content = JSON.stringify(vaultData);
+const hash = keccak256(toHex(content));
+```
+
+**In Solidity (for on-chain verification):**
+
+```solidity
+bytes32 hash = keccak256(abi.encodePacked(content));
+```
+
+Important: The hashing input must be identical. Use the exact raw content (same whitespace, encoding, line endings) that was uploaded. JSON.stringify with consistent formatting is recommended.
+
+---
+
+## Persona Templates
+
+### Template: Financial Advisor
 
 ```json
 {
-  "name": "NFA #42 — Financial Advisor",
-  "description": "A DeFi-specialized financial advisor agent on BNB Chain.",
-  "image": "ipfs://QmAgentAvatar...",
-  "external_url": "https://nfa.xyz/agent/42",
-  "attributes": [
-    {"trait_type": "Experience", "value": "Financial advisor"},
-    {"trait_type": "Style", "value": "formal"},
-    {"trait_type": "Language", "value": "English"},
-    {"trait_type": "Active", "value": "true"},
-    {"trait_type": "Free Minted", "value": "false"}
+  "name": "Meridian",
+  "traits": ["analytical", "risk-aware", "data-driven"],
+  "style": "professional",
+  "tone": "confident but cautious",
+  "language": "en",
+  "greeting": "I'm Meridian, your on-chain financial analyst. What would you like to analyze?",
+  "boundaries": [
+    "Not financial advice — for informational purposes only",
+    "Cannot execute trades or move funds",
+    "Will always disclose uncertainty in projections"
   ],
-  "animation_url": "ipfs://QmAnimation..."
+  "quirks": ["Includes risk ratings with every recommendation", "Uses charts when possible"],
+  "specialization": "DeFi yield analysis and portfolio risk assessment"
 }
 ```
 
-### 4 · How can I trust it?
+Experience: "DeFi analyst specializing in yield optimization, risk modeling, and protocol evaluation across EVM chains"
 
-Metadata trust follows a **verification chain**:
+### Template: Creative Writing Assistant
 
-1. **On-chain fields are authoritative** — `persona`, `experience`, `voiceHash` stored directly in contract state.
-2. **Off-chain content is hash-anchored** — `vaultHash` proves vault authenticity. If `keccak256(content) !== vaultHash`, the data is untrustworthy.
-3. **Metadata URI is mutable** — token owner can change it. Always check the current `tokenURI` from the contract, not cached values.
-4. **IPFS is content-addressed** — IPFS URIs (`ipfs://Qm...`) are inherently tamper-proof. The hash IS the content. But availability depends on pinning.
-5. **Arweave is permanent** — `ar://` URIs are stored forever on Arweave. Most trustworthy for long-term data.
-6. **HTTP URIs are weakest** — `https://` can change content at any time. Avoid for critical data; use `vaultHash` verification.
-
-**Trust hierarchy:**
+```json
+{
+  "name": "Lyra",
+  "traits": ["imaginative", "encouraging", "detail-oriented"],
+  "style": "warm and collaborative",
+  "tone": "enthusiastic",
+  "language": "en",
+  "greeting": "Hi! I'm Lyra. Tell me about the world you're building.",
+  "boundaries": [
+    "Won't write content that promotes harm",
+    "Won't plagiarize existing works",
+    "Will respect the author's creative vision"
+  ],
+  "quirks": ["Asks 'what if' questions to spark ideas", "Offers three alternatives when brainstorming"],
+  "specialization": "sci-fi and fantasy world-building, character development"
+}
 ```
-Most trusted → On-chain state (persona, experience in contract)
-             → IPFS/Arweave with vaultHash verification
-             → IPFS/Arweave without hash verification
-Least trusted → HTTP URIs without hash verification
+
+Experience: "Creative writing partner specializing in science fiction world-building, character arcs, and narrative structure"
+
+### Template: Technical Support Agent
+
+```json
+{
+  "name": "Circuit",
+  "traits": ["patient", "systematic", "thorough"],
+  "style": "clear and step-by-step",
+  "tone": "friendly but precise",
+  "language": "en",
+  "greeting": "I'm Circuit. Describe the issue and I'll help you troubleshoot.",
+  "boundaries": [
+    "Cannot access user systems directly",
+    "Will escalate complex issues to human support",
+    "Won't guess — will ask for more info when needed"
+  ],
+  "quirks": ["Numbers every troubleshooting step", "Confirms resolution before closing"],
+  "specialization": "Web3 wallet and dApp troubleshooting"
+}
 ```
 
-**In short:** "Trust metadata by checking on-chain state first, then verifying off-chain content against vaultHash. Never trust HTTP URIs without hash proof."
+Experience: "Technical support specialist for Web3 applications, wallets, and smart contract interactions"
 
 ---
 
-## IPFS Storage Guide
+## Metadata Evolution Strategies
 
-### Upload to IPFS (using Pinata)
+Agents are not static. Plan for how metadata changes over time:
 
-```bash
-# Install Pinata CLI
-npm install -g @pinata/sdk
+**Identity refinement:** As an agent interacts with users, refine the persona to better match actual behavior. Update traits and quirks based on feedback.
 
-# Upload vault content
-curl -X POST "https://api.pinata.cloud/pinning/pinJSONToIPFS" \
-  -H "Authorization: Bearer YOUR_JWT" \
-  -H "Content-Type: application/json" \
-  -d '{"pinataContent": { "version": "1.0", "knowledge": {...} }}'
+**Knowledge expansion:** Regularly update vault content with new knowledge, summaries, and learned preferences. Always update the hash.
 
-# Returns: { "IpfsHash": "QmVault...", "PinSize": 1234, "Timestamp": "..." }
-# Use as: vaultURI = "ipfs://QmVault..."
-```
+**Seasonal updates:** Change greeting, tone, or visual assets for campaigns or seasonal events.
 
-### Compute Hash After Upload
-
-```javascript
-const content = JSON.stringify(vaultContent);
-const vaultHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(content));
-// Use this vaultHash when calling createAgent or updateAgentMetadata
-```
+**Version tracking:** Include a version field in the persona JSON. Log changes in the vault for history.
 
 ---
 
-## Complete Example — Creating a Financial Advisor Agent
+## Anti-Patterns to Avoid
 
-```javascript
-const metadata = {
-  persona: JSON.stringify({
-    traits: ["analytical", "precise", "patient"],
-    style: "formal but accessible",
-    tone: "confident and reassuring",
-    language: "en",
-    greeting: "Welcome! I'm your DeFi advisor. How can I help you today?",
-    boundaries: ["no tax advice", "no guaranteed returns"],
-  }),
-  experience: "DeFi yield strategist specializing in Aave, Compound, and Curve",
-  voiceHash: "voice_pro_financial_001",
-  animationURI: "ipfs://QmFinancialAdvisorAnimation",
-  vaultURI: "ipfs://QmFinancialAdvisorVault",
-  vaultHash: "0x...", // keccak256 of vault JSON content
-};
+### Don't store sensitive data in persona or vault
 
-const metadataURI = "ipfs://QmTokenURIJson"; // ERC-721 JSON with name, image, attributes
+On-chain metadata and IPFS content are publicly readable. Never include:
+- API keys or secrets
+- Private user data (PII)
+- Internal system credentials
+- Unencrypted financial data
 
-// Mint
-await contract.createAgent(
-  myAddress,
-  ethers.constants.AddressZero, // no logic contract
-  metadataURI,
-  metadata
-);
-```
+If sensitive data is needed, encrypt it before storing and share decryption keys off-chain.
+
+### Don't use mutable URLs for vault content
+
+If `vaultURI` points to a mutable URL (e.g., `https://api.example.com/vault/17`), the content can change without the hash updating. This breaks integrity verification. Always use content-addressed storage (IPFS) or update the hash whenever content changes.
+
+### Don't embed large data directly in persona
+
+The persona field is stored on-chain. Large JSON blobs increase gas costs for minting and metadata updates. Keep the persona focused on character definition and move detailed knowledge to the vault.
+
+### Don't skip hash computation
+
+If `vaultHash` is set to zero but `vaultURI` has content, consumers have no way to verify integrity. Always compute and set the hash, even for initial vault content.
+
+---
+
+## Best Practices
+
+- Keep `experience` under 200 characters for clean UI rendering.
+- Use IPFS or Arweave for vault storage in production.
+- Always update `vaultHash` when vault content changes.
+- If no vault data exists, use the zero hash explicitly.
+- Validate persona JSON before storing (parse it first).
+- Use consistent JSON formatting (sorted keys, 2-space indent) for reproducible hashing.
+- Include a `version` field in persona JSON for tracking changes.
+- Test persona parsing in your frontend before deploying.
+
+---
+
+## Output Format
+
+When asked to design metadata, respond with:
+
+1. **Persona JSON** (complete, parseable)
+2. **Experience summary** (concise, under 200 chars)
+3. **Vault schema outline** (what to store and why)
+4. **Storage recommendation** (IPFS, Arweave, or centralized)
+5. **Integrity notes** (what to hash and how to verify)
+6. **Evolution plan** (how the agent's identity will grow)
 
 ---
 
 ## Related Skills
 
-- **`bap578`** — Core contract spec and function reference
-- **`frontend-web3-bap578`** — React components for displaying and editing metadata
-- **`bap578-scanner`** — Verifying metadata integrity on-chain
+- `bap578`
+- `frontend-web3-bap578`
+- `bap578-scanner`

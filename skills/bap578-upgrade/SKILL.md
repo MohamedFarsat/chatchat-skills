@@ -3,10 +3,8 @@ id: bap578-upgrade
 name: BAP-578 Contract Upgrade
 description: >
   Safely upgrade BAP-578 Non-Fungible Agents using the UUPS proxy pattern.
-  Covers writing V2+ implementations, storage layout safety, upgrade testing,
-  deployment, state preservation verification, rollback planning, and
-  governance best practices. Use when upgrading or planning upgrades to a
-  deployed BAP-578 contract.
+  Covers storage safety, upgrade testing, deployment steps, and rollback
+  planning. Use when upgrading or planning upgrades to a deployed contract.
 category: BAP-578
 author: community
 version: 1.0.0
@@ -21,281 +19,557 @@ examples:
 
 # BAP-578 Contract Upgrade
 
-Use this skill when planning, writing, testing, or executing a UUPS upgrade for a deployed BAP-578 Non-Fungible Agents contract. Upgrades allow adding features, fixing bugs, and evolving the contract — but they're irreversible and high-risk. This skill ensures you do it safely.
+Use this skill to plan, implement, test, and execute safe upgrades to deployed BAP-578 contracts using the UUPS (Universal Upgradeable Proxy Standard) pattern. This skill covers storage layout discipline, writing V2+ implementations, upgrade testing strategies, deployment procedures, and rollback planning.
 
 ---
 
-## The Four Identity Questions — Upgrade Perspective
+## When to use this skill
 
-### 1 · Who are you?
+- Adding new features to a deployed BAP-578 contract.
+- Fixing bugs in the deployed implementation.
+- Understanding how UUPS upgrades work.
+- Writing a V2 implementation that preserves existing state.
+- Testing upgrades before mainnet execution.
+- Planning rollback strategies for failed upgrades.
+- Reviewing upgrade safety as part of a security audit.
 
-I am the **evolution mechanism** for BAP-578. I answer the question: **"How does an agent contract grow without losing its history?"**
+---
 
-BAP-578 uses the **UUPS (Universal Upgradeable Proxy Standard)** pattern from OpenZeppelin:
+## The Four Identity Questions (Upgrade View)
+
+### 1) Who are you?
+
+The upgrade mechanism is the evolution layer for the contract. It allows the contract logic to change while keeping the same proxy address, the same token IDs, the same balances, and the same metadata. Users interact with the same address before and after an upgrade — their agents, funds, and identities are preserved.
+
+### 2) What do you remember?
+
+Proxy state is preserved across upgrades because storage lives in the proxy contract, not the implementation. All existing data — agent metadata, balances, ownership, free mint records, treasury address — remains intact. The new implementation simply provides updated logic for reading and writing that same storage.
+
+### 3) What can you do?
+
+Upgrades can add new features, fix bugs, optimize gas usage, and extend the contract's capabilities. Specific examples:
+
+- Add new metadata fields (requires storage-safe pattern)
+- Add new administrative functions
+- Fix discovered vulnerabilities
+- Add ERC-2981 royalty support
+- Implement dynamic pricing logic
+- Add new events for better indexing
+- Optimize gas for existing functions
+
+### 4) How can I trust it?
+
+Upgrades are restricted to the contract owner via `_authorizeUpgrade`. Trust is maintained by:
+
+- Owner-only upgrade authorization
+- Testnet deployment and verification before mainnet
+- Storage layout validation (automated tools available)
+- Community review of upgrade code
+- Transparent upgrade announcements
+- Time-locked upgrades (if implemented)
+
+---
+
+## UUPS Proxy Pattern Explained
+
+### How it works
 
 ```
-User calls ──► Proxy Contract (permanent address)
-                    │
-                    │  delegatecall
-                    ▼
-               Implementation V1  ←── current logic
-               Implementation V2  ←── after upgrade (new logic, same state)
+User → Proxy Contract (fixed address) → Implementation Contract (replaceable)
+              ↓                                    ↓
+        Storage lives here                  Logic lives here
+        (never changes address)             (can be swapped)
 ```
 
-- The **proxy** holds all state (agents, metadata, balances). Its address never changes.
-- The **implementation** holds the logic. It can be swapped by the contract owner.
-- After upgrade, all existing agents, balances, and metadata are preserved.
+The proxy delegates all calls to the current implementation using `delegatecall`. This means the implementation's code runs in the context of the proxy's storage. When you upgrade, you deploy a new implementation and tell the proxy to point to it.
 
-**In short:** "I let the contract evolve. New features, same agents, same address, same trust."
+### Key components
 
-### 2 · What do you remember?
+- **Proxy:** holds all storage, delegates calls to implementation
+- **Implementation V1:** current logic contract
+- **Implementation V2:** new logic contract (deployed separately)
+- **`_authorizeUpgrade`:** function that gates who can trigger upgrades
 
-Upgrades preserve **all existing state** because state lives in the proxy, not the implementation:
+### Why UUPS over Transparent Proxy?
 
-| Preserved | Where | Verified by |
-|-----------|-------|-------------|
-| All agent states | Proxy storage | V2 test: `agentStateBefore == agentStateAfter` |
-| All agent metadata | Proxy storage | V2 test: persona, experience unchanged |
-| Token ownership | Proxy storage | V2 test: `ownerOf`, `balanceOf` unchanged |
-| Total supply | Proxy storage | V2 test: `totalSupply` unchanged |
-| Treasury address | Proxy storage | V2 test: `treasuryAddress` unchanged |
-| Contract owner | Proxy storage | V2 test: `owner()` unchanged |
-| Free mint tracking | Proxy storage | V2 test: `freeMintsClaimed`, `bonusFreeMints` unchanged |
-| Agent balances | Proxy storage | V2 test: ETH/BNB balances unchanged |
+UUPS puts the upgrade logic in the implementation, not the proxy. Benefits:
+- Smaller proxy contract (cheaper to deploy)
+- Upgrade logic can be removed in future versions if desired
+- More gas-efficient for normal operations
 
-The existing test suite (`BAP578.test.js` → "UUPS Upgrade" section) confirms state preservation.
+---
 
-### 3 · What can you do?
+## Storage Layout Rules
 
-#### Writing a V2 Implementation
+The single most critical rule for safe upgrades:
 
-**Rules for safe V2 contracts:**
+**NEVER reorder, rename, or remove existing state variables. Only append new variables at the end.**
 
-1. **Inherit from the current version** — `contract BAP578V2 is BAP578`
-2. **Only APPEND new state variables** — never insert, reorder, or remove existing ones
-3. **Never change existing function signatures** — add new functions, don't modify old ones
-4. **Use a reinitializer if needed** — `reinitializer(2)` for V2 initialization logic
-5. **Keep `_authorizeUpgrade` override** — must remain `onlyOwner`
+### Safe storage changes
+
+```solidity
+// V1 storage
+contract NonFungibleAgentsV1 {
+    uint256 private _totalSupply;
+    mapping(uint256 => AgentState) private _agents;
+    mapping(uint256 => AgentMetadata) private _metadata;
+    address private _treasury;
+    bool private _paused;
+}
+
+// V2 storage — SAFE: only appended new variables
+contract NonFungibleAgentsV2 is NonFungibleAgentsV1 {
+    // New variables appended after all V1 variables
+    uint256 private _royaltyBps;
+    mapping(uint256 => uint256) private _agentReputation;
+}
+```
+
+### Unsafe storage changes
+
+```solidity
+// V2 storage — DANGEROUS: reordered variables
+contract NonFungibleAgentsV2 {
+    bool private _paused;           // MOVED — was 5th, now 1st
+    uint256 private _totalSupply;   // SHIFTED — storage slot changed
+    // This will corrupt ALL existing data
+}
+```
+
+### Storage gap pattern
+
+Reserve storage slots for future use in the base contract:
+
+```solidity
+contract NonFungibleAgentsV1 {
+    uint256 private _totalSupply;
+    mapping(uint256 => AgentState) private _agents;
+    // ... other variables
+
+    // Reserve 50 slots for future upgrades
+    uint256[50] private __gap;
+}
+```
+
+When adding new variables in V2, reduce the gap:
+
+```solidity
+contract NonFungibleAgentsV2 is NonFungibleAgentsV1 {
+    uint256 private _royaltyBps;
+    // Gap reduced by 1 (from 50 to 49)
+    uint256[49] private __gap;
+}
+```
+
+---
+
+## Writing a V2 Implementation
+
+### Step-by-step process
+
+**1. Inherit from V1:**
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
-import "./BAP578.sol";
+import "./NonFungibleAgentsV1.sol";
 
-contract BAP578V2 is BAP578 {
-    // ═══ NEW STATE VARIABLES (append only!) ═══
-    uint256 public royaltyBasisPoints;        // New: royalty percentage
-    mapping(uint256 => string) public agentTags; // New: tagging system
+contract NonFungibleAgentsV2 is NonFungibleAgentsV1 {
+    // New state variables (appended only)
+    uint256 private _royaltyBps;
 
-    // ═══ NEW EVENTS ═══
-    event RoyaltyUpdated(uint256 basisPoints);
-    event AgentTagged(uint256 indexed tokenId, string tag);
+    // New events
+    event RoyaltyUpdated(uint256 newBps);
 
-    // ═══ REINITIALIZER (runs once on upgrade) ═══
-    function initializeV2(uint256 _royaltyBps) public reinitializer(2) {
-        royaltyBasisPoints = _royaltyBps;
+    // Reinitializer for V2-specific setup
+    function initializeV2(uint256 royaltyBps) external reinitializer(2) {
+        _royaltyBps = royaltyBps;
     }
 
-    // ═══ NEW FUNCTIONS ═══
-    function setRoyalty(uint256 basisPoints) external onlyOwner {
-        require(basisPoints <= 1000, "Max 10%");
-        royaltyBasisPoints = basisPoints;
-        emit RoyaltyUpdated(basisPoints);
+    // New functions
+    function setRoyalty(uint256 bps) external onlyOwner {
+        require(bps <= 1000, "Max 10%");
+        _royaltyBps = bps;
+        emit RoyaltyUpdated(bps);
     }
 
-    function tagAgent(uint256 tokenId, string memory tag) external onlyTokenOwner(tokenId) {
-        agentTags[tokenId] = tag;
-        emit AgentTagged(tokenId, tag);
+    function getRoyalty() external view returns (uint256) {
+        return _royaltyBps;
     }
 
-    function version() external pure returns (string memory) {
-        return "v2";
-    }
+    // Override existing functions if needed
+    // Always call super for inherited behavior
 }
 ```
 
-#### Storage Layout Safety
+**2. Use reinitializer (not initializer):**
 
-```
-BAP578 Storage Layout (DO NOT MODIFY):
-═══════════════════════════════════════
-Slot 0-N:   ERC721Upgradeable state
-Slot N+1:   ERC721EnumerableUpgradeable state
-Slot N+2:   ERC721URIStorageUpgradeable state
-Slot N+3:   ReentrancyGuardUpgradeable state
-Slot N+4:   OwnableUpgradeable state
-Slot N+5:   _tokenIdCounter
-Slot N+6:   agentStates mapping
-Slot N+7:   agentMetadata mapping
-Slot N+8:   freeMintsPerUser
-Slot N+9:   freeMintsClaimed mapping
-Slot N+10:  isFreeMint mapping
-Slot N+11:  bonusFreeMints mapping
-Slot N+12:  treasuryAddress
-Slot N+13:  paused
-─────────────────────────────────────
-V2 ADDITIONS (append here):
-Slot N+14:  royaltyBasisPoints  ← NEW
-Slot N+15:  agentTags mapping   ← NEW
+The `initializer` modifier can only be called once (for V1). For subsequent versions, use `reinitializer(version)`:
+
+```solidity
+function initializeV2(uint256 param) external reinitializer(2) {
+    // V2-specific initialization
+}
+
+function initializeV3(uint256 param) external reinitializer(3) {
+    // V3-specific initialization
+}
 ```
 
-**Critical rules:**
-- ✅ Add new variables AFTER all existing ones
-- ❌ Never insert between existing variables
-- ❌ Never remove or rename existing variables
-- ❌ Never change types of existing variables
-- ✅ Use `__gap` arrays for future-proofing (optional but recommended)
+**3. Disable initializers in constructor:**
 
-#### Upgrade Testing
+```solidity
+constructor() {
+    _disableInitializers();
+}
+```
 
-**Write upgrade tests BEFORE deploying:**
+---
 
-```javascript
-describe("BAP578 V2 Upgrade", function () {
-    it("Should upgrade and preserve all state", async function () {
-        // 1. Deploy V1 and create agents
-        const BAP578 = await ethers.getContractFactory("BAP578");
-        const proxy = await upgrades.deployProxy(BAP578,
-            ["Non-Fungible Agents", "NFA", treasury.address],
-            { initializer: "initialize", kind: "uups" }
-        );
-        
-        // Create agent on V1
-        const metadata = createAgentMetadata();
-        await proxy.connect(addr1).createAgent(
-            addr1.address, ethers.constants.AddressZero,
-            "ipfs://test", metadata
-        );
-        await proxy.connect(addr1).fundAgent(1, { value: parseEther("0.5") });
-        
-        // Record V1 state
-        const supplyBefore = await proxy.totalSupply();
-        const ownerBefore = await proxy.owner();
-        const treasuryBefore = await proxy.treasuryAddress();
-        const stateBefore = await proxy.getAgentState(1);
-        const [metaBefore] = await proxy.getAgentMetadata(1);
-        
-        // 2. Upgrade to V2
-        const BAP578V2 = await ethers.getContractFactory("BAP578V2");
-        const upgraded = await upgrades.upgradeProxy(proxy.address, BAP578V2);
-        
-        // 3. Verify ALL state preserved
-        expect(await upgraded.totalSupply()).to.equal(supplyBefore);
-        expect(await upgraded.owner()).to.equal(ownerBefore);
-        expect(await upgraded.treasuryAddress()).to.equal(treasuryBefore);
-        
-        const stateAfter = await upgraded.getAgentState(1);
-        expect(stateAfter.balance).to.equal(stateBefore.balance);
-        expect(stateAfter.active).to.equal(stateBefore.active);
-        expect(stateAfter.owner).to.equal(stateBefore.owner);
-        
-        const [metaAfter] = await upgraded.getAgentMetadata(1);
-        expect(metaAfter.persona).to.equal(metaBefore.persona);
-        expect(metaAfter.experience).to.equal(metaBefore.experience);
-        
-        // 4. Verify V2 functions work
-        expect(await upgraded.version()).to.equal("v2");
-        
-        // 5. Verify V1 functions still work
-        await proxy.connect(addr2).createAgent(
-            addr2.address, ethers.constants.AddressZero,
-            "ipfs://test2", metadata
-        );
-        expect(await upgraded.totalSupply()).to.equal(supplyBefore.add(1));
+## Testing Upgrades
+
+### Testing strategy
+
+1. **Unit test V2 functions** — test new features independently.
+2. **Upgrade test** — deploy V1, populate state, upgrade to V2, verify state.
+3. **Storage validation** — verify all V1 data is intact after upgrade.
+4. **Access control test** — verify `_authorizeUpgrade` is still owner-only.
+5. **Regression test** — run full V1 test suite against V2.
+
+### Example upgrade test
+
+```js
+const { ethers, upgrades } = require("hardhat");
+const { expect } = require("chai");
+
+describe("Upgrade V1 → V2", function () {
+  let nfa, nfaV2, owner, user;
+
+  beforeEach(async function () {
+    [owner, user] = await ethers.getSigners();
+
+    // Deploy V1
+    const V1 = await ethers.getContractFactory("NonFungibleAgentsV1");
+    nfa = await upgrades.deployProxy(V1, [
+      "Non-Fungible Agents",
+      "NFA",
+      owner.address, // treasury
+    ], { kind: "uups" });
+
+    // Create an agent in V1
+    await nfa.createAgent(
+      user.address,
+      ethers.ZeroAddress,
+      "ipfs://metadata",
+      {
+        persona: '{"name":"Test"}',
+        experience: "Test agent",
+        voiceHash: "",
+        animationURI: "",
+        vaultURI: "",
+        vaultHash: ethers.ZeroHash,
+      }
+    );
+
+    // Upgrade to V2
+    const V2 = await ethers.getContractFactory("NonFungibleAgentsV2");
+    nfaV2 = await upgrades.upgradeProxy(nfa.target, V2, {
+      call: { fn: "initializeV2", args: [250] }, // 2.5% royalty
     });
-    
-    it("Should only allow owner to upgrade", async function () {
-        const BAP578V2 = await ethers.getContractFactory("BAP578V2", addr1);
-        await expect(
-            upgrades.upgradeProxy(proxy.address, BAP578V2)
-        ).to.be.revertedWith("Ownable: caller is not the owner");
-    });
+  });
+
+  it("preserves V1 state after upgrade", async function () {
+    // Token still exists
+    expect(await nfaV2.ownerOf(1)).to.equal(user.address);
+
+    // Metadata intact
+    const meta = await nfaV2.getAgentMetadata(1);
+    expect(meta.experience).to.equal("Test agent");
+
+    // Total supply unchanged
+    expect(await nfaV2.getTotalSupply()).to.equal(1);
+  });
+
+  it("new V2 functions work", async function () {
+    expect(await nfaV2.getRoyalty()).to.equal(250);
+
+    await nfaV2.setRoyalty(500);
+    expect(await nfaV2.getRoyalty()).to.equal(500);
+  });
+
+  it("V1 functions still work", async function () {
+    // Can still mint
+    await nfaV2.createAgent(
+      user.address,
+      ethers.ZeroAddress,
+      "ipfs://metadata2",
+      {
+        persona: '{"name":"Test2"}',
+        experience: "Another agent",
+        voiceHash: "",
+        animationURI: "",
+        vaultURI: "",
+        vaultHash: ethers.ZeroHash,
+      }
+    );
+    expect(await nfaV2.getTotalSupply()).to.equal(2);
+  });
+
+  it("only owner can upgrade", async function () {
+    const V2Again = await ethers.getContractFactory("NonFungibleAgentsV2", user);
+    await expect(
+      upgrades.upgradeProxy(nfaV2.target, V2Again)
+    ).to.be.reverted;
+  });
 });
 ```
 
-#### Upgrade Execution
+### Storage layout validation
+
+Use Hardhat's upgrade plugin to validate storage compatibility:
 
 ```bash
-# 1. Run ALL tests (V1 + V2)
-npm test
-
-# 2. Deploy on testnet first
-npx hardhat run scripts/upgrade-v2.js --network testnet
-
-# 3. Verify new implementation on BscScan
-npx hardhat verify --network testnet NEW_IMPLEMENTATION_ADDRESS
-
-# 4. Test on testnet thoroughly
-npm run interact:testnet
-# → Verify existing agents still work
-# → Test new V2 features
-
-# 5. Only then upgrade mainnet
-npx hardhat run scripts/upgrade-v2.js --network mainnet
+npx hardhat run scripts/validate-upgrade.js
 ```
 
-**Example upgrade script (`scripts/upgrade-v2.js`):**
-
-```javascript
-const { ethers, upgrades } = require("hardhat");
-const fs = require("fs");
+```js
+const { upgrades } = require("hardhat");
 
 async function main() {
-    const network = hre.network.name;
-    const deployment = JSON.parse(
-        fs.readFileSync(`./deployments/${network}_deployment.json`, "utf8")
-    );
-    
-    console.log("Upgrading proxy at:", deployment.proxy);
-    
-    const BAP578V2 = await ethers.getContractFactory("BAP578V2");
-    const upgraded = await upgrades.upgradeProxy(deployment.proxy, BAP578V2);
-    
-    const newImpl = await upgrades.erc1967.getImplementationAddress(upgraded.address);
-    console.log("New implementation:", newImpl);
-    console.log("Version:", await upgraded.version());
-    
-    // Save updated deployment info
-    deployment.implementationV2 = newImpl;
-    deployment.upgradedAt = new Date().toISOString();
-    fs.writeFileSync(
-        `./deployments/${network}_deployment.json`,
-        JSON.stringify(deployment, null, 2)
-    );
+  const V1 = await ethers.getContractFactory("NonFungibleAgentsV1");
+  const V2 = await ethers.getContractFactory("NonFungibleAgentsV2");
+
+  // This will throw if storage layout is incompatible
+  await upgrades.validateUpgrade(V1, V2, { kind: "uups" });
+  console.log("Storage layout is compatible ✓");
 }
-
-main().catch(console.error);
 ```
 
-### 4 · How can I trust it?
+---
 
-Upgrade trust is the highest bar in BAP-578:
+## Deployment Procedure
 
-- **Only the owner can authorize** — `_authorizeUpgrade` is `onlyOwner`. No one else can change the logic.
-- **State is preserved** — the V2 test suite proves all agents, balances, metadata, and ownership survive the upgrade.
-- **Testnet first** — always deploy and test on BSC Testnet before mainnet. Verify via interact CLI.
-- **New implementation is verified** — publish source on BscScan so anyone can audit the changes.
-- **Announce to community** — publish what changed, why, and the new implementation address before executing.
-- **Consider a timelock** — add `TimelockController` so upgrades have a delay period for community review.
+### Pre-upgrade checklist
 
-**Trust checklist before mainnet upgrade:**
+- [ ] V2 code reviewed and tested
+- [ ] All V1 tests pass against V2
+- [ ] Storage layout validated (no collisions)
+- [ ] `_authorizeUpgrade` is still owner-only in V2
+- [ ] Reinitializer version is correct
+- [ ] Testnet upgrade successful
+- [ ] State verified on testnet after upgrade
+
+### Mainnet upgrade steps
+
+```bash
+# 1. Deploy new implementation
+npx hardhat run scripts/deploy-v2.js --network bsc
+
+# 2. Verify on explorer
+npx hardhat verify --network bsc NEW_IMPL_ADDRESS
+
+# 3. Execute upgrade (via script or multisig)
+npx hardhat run scripts/upgrade-to-v2.js --network bsc
 ```
-[ ] V2 tests pass (state preservation + new features)
-[ ] Storage layout verified (no slot collisions)
-[ ] Deployed and tested on testnet
-[ ] New implementation verified on BscScan
-[ ] Changelog published to community
-[ ] Timelock delay completed (if applicable)
-[ ] Multisig approval (if owner is multisig)
+
+### Post-upgrade verification
+
+- [ ] Proxy address unchanged
+- [ ] New implementation address recorded
+- [ ] `owner()` returns correct address
+- [ ] Existing agents queryable with correct data
+- [ ] New V2 functions accessible
+- [ ] Total supply unchanged
+- [ ] Treasury address unchanged
+- [ ] Test mint succeeds on upgraded contract
+
+---
+
+## Rollback Planning
+
+### If upgrade fails on testnet
+
+Simply redeploy V1 as a new implementation and upgrade back.
+
+### If upgrade fails on mainnet
+
+1. **Pause the contract** immediately (if possible).
+2. **Deploy a V2-fix** implementation that corrects the issue.
+3. **Upgrade to V2-fix** via the standard upgrade path.
+4. **Unpause** after verification.
+
+### If owner key is compromised
+
+This is a critical scenario. Mitigations:
+
+- Use a multisig as the contract owner.
+- Implement a time-lock on upgrades (requires V2 feature).
+- Monitor for unexpected `Upgraded` events.
+
+---
+
+## Common Upgrade Scenarios
+
+### Scenario: Adding ERC-2981 Royalty Support
+
+```solidity
+contract NonFungibleAgentsV2 is NonFungibleAgentsV1, IERC2981 {
+    uint256 private _royaltyBps;
+    address private _royaltyReceiver;
+
+    function initializeV2(address receiver, uint256 bps) external reinitializer(2) {
+        _royaltyReceiver = receiver;
+        _royaltyBps = bps;
+    }
+
+    function royaltyInfo(uint256, uint256 salePrice) external view returns (address, uint256) {
+        uint256 royaltyAmount = (salePrice * _royaltyBps) / 10000;
+        return (_royaltyReceiver, royaltyAmount);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
+    }
+}
 ```
 
-**In short:** "Trust upgrades by verifying tests pass, state is preserved, testnet is clean, source is published, and the community is informed."
+Storage impact: 2 new variables appended. Safe.
+
+### Scenario: Adding Dynamic Pricing
+
+```solidity
+contract NonFungibleAgentsV2 is NonFungibleAgentsV1 {
+    uint256 private _tier1Fee;
+    uint256 private _tier2Fee;
+    uint256 private _tier1Threshold;
+
+    function initializeV2(uint256 t1Fee, uint256 t2Fee, uint256 threshold) external reinitializer(2) {
+        _tier1Fee = t1Fee;
+        _tier2Fee = t2Fee;
+        _tier1Threshold = threshold;
+    }
+
+    function getMintFee() public view returns (uint256) {
+        if (getTotalSupply() < _tier1Threshold) return _tier1Fee;
+        return _tier2Fee;
+    }
+}
+```
+
+Storage impact: 3 new variables appended. Safe.
+
+### Scenario: Adding New Events
+
+Adding events requires no storage changes — events are log entries, not state. Simply add the event declaration and emit it in the appropriate function:
+
+```solidity
+event AgentBurned(uint256 indexed tokenId, address indexed owner);
+
+function burnAgent(uint256 tokenId) external {
+    require(ownerOf(tokenId) == msg.sender, "Not token owner");
+    require(getAgentState(tokenId).balance == 0, "Withdraw funds first");
+    _burn(tokenId);
+    emit AgentBurned(tokenId, msg.sender);
+}
+```
+
+Storage impact: None. Safe.
+
+### Scenario: Bug Fix
+
+If a bug is found in an existing function, create V2 that overrides the function with the fix:
+
+```solidity
+contract NonFungibleAgentsV2 is NonFungibleAgentsV1 {
+    function initializeV2() external reinitializer(2) {}
+
+    // Override the buggy function with the fix
+    function withdrawFromAgent(uint256 tokenId, uint256 amount) external override nonReentrant {
+        require(ownerOf(tokenId) == msg.sender, "Not token owner");
+        require(amount > 0, "Amount must be > 0"); // NEW: added zero check
+        AgentState storage agent = _agents[tokenId];
+        require(amount <= agent.balance, "Insufficient balance");
+        agent.balance -= amount;
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transfer failed");
+        emit AgentWithdraw(tokenId, msg.sender, amount);
+    }
+}
+```
+
+---
+
+## Upgrade Governance Patterns
+
+### Timelock pattern
+
+For production deployments, add a timelock to prevent instant upgrades:
+
+1. Owner proposes an upgrade with a new implementation address.
+2. A waiting period (e.g., 48 hours) must pass.
+3. After the timelock expires, the upgrade can be executed.
+4. During the waiting period, the community can review the new implementation.
+
+This can be implemented via OpenZeppelin's TimelockController as the contract owner.
+
+### Multisig pattern
+
+Use a multisig wallet (e.g., Safe) as the contract owner:
+
+- 2-of-3 or 3-of-5 signer threshold
+- Upgrade proposals require multiple approvals
+- Provides accountability and prevents single-key compromise
+
+### Upgrade announcement protocol
+
+Before any mainnet upgrade:
+
+1. Publish the V2 source code for community review.
+2. Deploy V2 implementation to testnet and verify.
+3. Run full test suite against testnet upgrade.
+4. Announce upgrade timeline with at least 48 hours notice.
+5. Execute upgrade during low-activity period.
+6. Verify immediately after upgrade.
+7. Publish post-upgrade report.
+
+---
+
+## Troubleshooting Upgrades
+
+### "Initializable: contract is already initialized"
+
+The initializer was already called. Use `reinitializer(version)` for V2+ initialization.
+
+### "ERC1967Upgrade: new implementation is not UUPS"
+
+The new implementation doesn't inherit UUPSUpgradeable or doesn't implement `_authorizeUpgrade`. Verify the V2 contract inherits correctly.
+
+### Storage layout incompatible
+
+The OpenZeppelin upgrade plugin detected a storage collision. Review the variable ordering in V2 and ensure it matches V1 with only appended variables.
+
+### "Only proxy can call this function"
+
+Attempted to call an upgrade function on the implementation directly. Always interact via the proxy address.
+
+---
+
+## Output Format
+
+When asked for upgrade help, respond with:
+
+1. **Change summary** (what's being added/fixed)
+2. **Storage layout notes** (what's safe, what's risky)
+3. **Complete V2 code** (compilable Solidity)
+4. **Test plan** (upgrade tests + regression)
+5. **Deployment steps** (testnet → mainnet)
+6. **Rollback strategy** (what to do if something goes wrong)
 
 ---
 
 ## Related Skills
 
-- **`bap578`** — Core contract spec and UUPS architecture
-- **`bap578-security-audit`** — Auditing upgrade safety and storage layout
-- **`bap578-testing`** — Writing comprehensive upgrade test suites
+- `bap578`
+- `bap578-testing`
+- `bap578-security-audit`

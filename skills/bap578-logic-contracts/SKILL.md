@@ -3,10 +3,8 @@ id: bap578-logic-contracts
 name: BAP-578 Logic Contracts
 description: >
   Build, deploy, and bind logic contracts to BAP-578 Non-Fungible Agents.
-  Logic contracts define autonomous agent behavior on-chain — automated
-  responses, DeFi actions, scheduled tasks, and cross-agent interactions.
-  Covers architecture, Solidity patterns, binding via setLogicAddress,
-  security considerations, and example implementations.
+  Logic contracts define autonomous agent behavior on-chain. Covers architecture,
+  binding rules, security considerations, and example patterns.
 category: BAP-578
 author: community
 version: 1.0.0
@@ -21,88 +19,142 @@ examples:
 
 # BAP-578 Logic Contracts
 
-Use this skill when building, deploying, or binding logic contracts to BAP-578 Non-Fungible Agents. Logic contracts transform agents from passive identities into **autonomous actors** — they define what an agent can do on-chain without human intervention.
+Use this skill to design, build, deploy, and bind logic contracts that define on-chain agent behavior for BAP-578 Non-Fungible Agents. Logic contracts are the behavioral extension layer — they give agents the ability to perform autonomous actions, execute strategies, respond to events, and interact with other contracts.
 
 ---
 
-## The Four Identity Questions — Logic Contract Perspective
+## When to use this skill
 
-### 1 · Who are you?
+- Designing autonomous behavior for a BAP-578 agent.
+- Building a logic contract from scratch.
+- Binding or unbinding a logic contract to an existing agent.
+- Reviewing the security of a logic contract before binding.
+- Understanding the relationship between the NFA contract and logic contracts.
+- Creating logic contract templates for common use cases.
+- Planning a logic contract marketplace.
 
-I am the **behavioral brain** of a BAP-578 agent. While the `AgentMetadata` struct defines who the agent *is* (persona, experience), the logic contract defines what the agent *does*.
+---
 
-The `logicAddress` field in `AgentState` can point to any deployed smart contract on BNB Chain. This contract becomes the agent's autonomous behavior layer:
+## The Four Identity Questions (Logic View)
+
+### 1) Who are you?
+
+The logic contract is the behavioral layer of a BAP-578 agent. While the main NFA contract defines identity (who the agent is) and state (what it remembers), the logic contract defines action (what it does). A logic contract is a separate smart contract deployed independently, then bound to an agent via the `logicAddress` field.
+
+The binding creates a relationship:
+- **NFA contract** = identity + state + ownership
+- **Logic contract** = behavior + strategy + automation
+
+Think of it as: the NFA contract is the agent's brain (memory and identity), and the logic contract is the agent's hands (actions and capabilities).
+
+### 2) What do you remember?
+
+Logic contracts can maintain their own state variables, giving agents additional memory beyond what the NFA contract stores. This could include:
+
+- Strategy parameters (thresholds, targets, limits)
+- Execution history (last action timestamp, cumulative results)
+- Configuration (enabled features, permissions)
+- Relationships (other agents or contracts it interacts with)
+
+The logic contract can also read the agent's on-chain state from the NFA contract by calling view functions like `getAgentState` and `getAgentMetadata`.
+
+### 3) What can you do?
+
+Logic contracts enable agents to perform actions autonomously. Capabilities depend entirely on what the logic contract implements:
+
+- **Execute strategies** — DeFi yield farming, rebalancing, arbitrage
+- **Respond to events** — react to price changes, governance proposals, or external triggers
+- **Route requests** — forward incoming calls to specialized handler contracts
+- **Manage resources** — allocate agent balance to different protocols
+- **Interact with other agents** — agent-to-agent communication and coordination
+- **Provide services** — answer queries, generate outputs, process requests
+
+### 4) How can I trust it?
+
+Logic contract trust must be established independently of the NFA contract:
+
+- **Source verification** — the logic contract source code should be verified on a block explorer
+- **Audit** — critical logic contracts should undergo security review
+- **Permissions analysis** — understand exactly what the logic contract can and cannot do
+- **Immutability assessment** — determine if the logic contract is upgradeable
+- **Separation of concerns** — the logic contract should not be able to drain agent funds unless explicitly designed to do so
+
+---
+
+## Architecture
+
+### How logic binding works
 
 ```
-Agent Identity (AgentMetadata)     Agent Behavior (logicAddress)
-├── persona (character)            ├── Automated DeFi strategies
-├── experience (knowledge)         ├── Scheduled task execution
-├── voice (presentation)           ├── Cross-agent messaging
-└── vault (memory)                 └── Custom business logic
+┌──────────────────────────┐
+│      NFA Contract         │
+│                           │
+│  Agent #17                │
+│  ├── owner: 0xABC         │
+│  ├── balance: 1.5 BNB     │
+│  ├── active: true         │
+│  ├── metadata: {...}      │
+│  └── logicAddress: 0xDEF  │◄──── binding
+│                           │
+└──────────────────────────┘
+              │
+              │ calls / reads
+              ▼
+┌──────────────────────────┐
+│    Logic Contract (0xDEF) │
+│                           │
+│  - execute()              │
+│  - getStatus()            │
+│  - configure()            │
+│                           │
+│  Can read NFA state via:  │
+│  - nfa.getAgentState(17)  │
+│  - nfa.getAgentMetadata() │
+│                           │
+└──────────────────────────┘
 ```
 
-**In short:** "I am the code that makes an agent act. Without me, the agent is a profile. With me, it's an autonomous actor."
+### Binding rules
 
-### 2 · What do you remember?
+1. **Only the token owner** can set the logic address for their agent.
+2. **The logic address must be a contract**, not an externally owned account (EOA). The contract checks `address.code.length > 0`.
+3. **Setting to `address(0)`** unbinds the logic contract (removes behavior).
+4. **Binding is reversible** — the owner can change or remove the logic contract at any time.
+5. **The logic contract has no special permissions** on the NFA contract. It cannot withdraw agent funds, transfer the token, or modify metadata unless explicitly delegated.
 
-The logic contract can store its own state and read the agent's state:
-
-| Memory source | Access method | Example |
-|---------------|--------------|---------|
-| Agent state | Call `BAP578.getAgentState(tokenId)` | Check balance, active status |
-| Agent metadata | Call `BAP578.getAgentMetadata(tokenId)` | Read persona, experience |
-| Logic contract state | Own storage variables | Strategy parameters, execution history |
-| BNB Chain state | Standard EVM reads | Block number, timestamps, other contracts |
-| Events | Emit and index own events | Execution logs, decision records |
-
-### 3 · What can you do?
-
-#### Architecture
-
-```
-┌──────────────┐    setLogicAddress()    ┌──────────────────┐
-│  BAP-578     │◄────────────────────────│  Agent Owner      │
-│  Contract    │                         └──────────────────┘
-│              │
-│  Agent #42   │    logicAddress ──────► ┌──────────────────┐
-│  ├─ state    │                         │  Logic Contract   │
-│  ├─ metadata │                         │                  │
-│  └─ balance  │                         │  execute()       │
-│              │◄─── reads state ────────│  autoCompound()  │
-└──────────────┘                         │  rebalance()     │
-                                         └──────────────────┘
-```
-
-#### Binding Rules
-
-1. **Only the token owner** can set or change the logic address (`onlyTokenOwner` modifier).
-2. **Must be a deployed contract** — `logicAddress.code.length > 0`. EOAs are rejected.
-3. **Zero address is valid** — `address(0)` unbinds the logic (removes behavior).
-4. **No automatic execution** — BAP-578 stores the reference but does not call the logic contract. External triggers (keepers, cron, users) invoke the logic.
+### Binding flow
 
 ```solidity
-// Bind a logic contract
-await bap578.setLogicAddress(tokenId, logicContractAddress);
+// Token owner binds a logic contract
+nfa.setLogicAddress(tokenId, logicContractAddress);
 
-// Unbind (remove behavior)
-await bap578.setLogicAddress(tokenId, ethers.constants.AddressZero);
+// Emits event for tracking
+// event LogicAddressChanged(uint256 indexed tokenId, address logicAddress);
+
+// Token owner unbinds
+nfa.setLogicAddress(tokenId, address(0));
 ```
 
-#### Example Logic Contracts
+---
 
-**1. Simple Greeter — Minimal pattern**
+## Building a Logic Contract
+
+### Minimal interface
+
+Logic contracts don't need to implement a specific interface, but a recommended pattern is:
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
-interface IBAP578 {
-    function getAgentState(uint256 tokenId) external view returns (
-        uint256 balance, bool active, address logicAddress, uint256 createdAt, address owner
-    );
-    function getAgentMetadata(uint256 tokenId) external view returns (
-        AgentMetadata memory metadata, string memory metadataURI
-    );
+interface INonFungibleAgents {
+    struct AgentState {
+        uint256 balance;
+        bool active;
+        address logicAddress;
+        uint256 createdAt;
+        address owner;
+    }
 
     struct AgentMetadata {
         string persona;
@@ -112,220 +164,401 @@ interface IBAP578 {
         string vaultURI;
         bytes32 vaultHash;
     }
+
+    function getAgentState(uint256 tokenId) external view returns (AgentState memory);
+    function getAgentMetadata(uint256 tokenId) external view returns (AgentMetadata memory);
 }
+```
 
-contract AgentGreeter {
-    IBAP578 public immutable bap578;
+### Pattern: Simple Greeter
 
-    event Greeted(uint256 indexed tokenId, string message);
+A minimal logic contract that reads agent metadata and returns a greeting:
 
-    constructor(address _bap578) {
-        bap578 = IBAP578(_bap578);
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "./INonFungibleAgents.sol";
+
+contract GreeterLogic {
+    INonFungibleAgents public immutable nfa;
+
+    event GreetingGenerated(uint256 indexed tokenId, string greeting);
+
+    constructor(address _nfa) {
+        nfa = INonFungibleAgents(_nfa);
     }
 
     function greet(uint256 tokenId) external view returns (string memory) {
-        (IBAP578.AgentMetadata memory meta, ) = bap578.getAgentMetadata(tokenId);
-        return string(abi.encodePacked("Hello from Agent #", _toString(tokenId),
-            ". I am: ", meta.experience));
+        INonFungibleAgents.AgentMetadata memory meta = nfa.getAgentMetadata(tokenId);
+        return string(abi.encodePacked(
+            "Hello! I am an agent with experience in: ",
+            meta.experience
+        ));
     }
 
-    function _toString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) return "0";
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) { digits++; temp /= 10; }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) { digits--; buffer[digits] = bytes1(uint8(48 + uint256(value % 10))); value /= 10; }
-        return string(buffer);
+    function getAgentInfo(uint256 tokenId) external view returns (
+        bool active,
+        uint256 balance,
+        string memory experience
+    ) {
+        INonFungibleAgents.AgentState memory state = nfa.getAgentState(tokenId);
+        INonFungibleAgents.AgentMetadata memory meta = nfa.getAgentMetadata(tokenId);
+        return (state.active, state.balance, meta.experience);
     }
 }
 ```
 
-**2. Auto-Fund Distributor — Splits received funds**
+### Pattern: Strategy Executor
+
+A logic contract that executes a defined action when triggered by a keeper or automation service:
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
-contract AgentFundSplitter {
-    address public immutable bap578;
-    
-    struct SplitConfig {
-        address[] recipients;
-        uint256[] shares; // basis points (10000 = 100%)
+import "./INonFungibleAgents.sol";
+
+contract StrategyLogic {
+    INonFungibleAgents public immutable nfa;
+
+    struct StrategyConfig {
+        uint256 threshold;
+        uint256 lastExecuted;
+        uint256 executionCount;
+        bool enabled;
     }
-    
-    mapping(uint256 => SplitConfig) public splits;
-    
-    event FundsSplit(uint256 indexed tokenId, uint256 totalAmount);
-    
-    constructor(address _bap578) {
-        bap578 = _bap578;
+
+    mapping(uint256 => StrategyConfig) public strategies;
+
+    event StrategyExecuted(uint256 indexed tokenId, uint256 timestamp);
+    event StrategyConfigured(uint256 indexed tokenId, uint256 threshold);
+
+    constructor(address _nfa) {
+        nfa = INonFungibleAgents(_nfa);
     }
-    
-    function configureSplit(
-        uint256 tokenId,
-        address[] calldata recipients,
-        uint256[] calldata shares
-    ) external {
-        // Verify caller is agent owner
-        (, , , , address owner) = IBAP578(bap578).getAgentState(tokenId);
-        require(msg.sender == owner, "Not agent owner");
-        require(recipients.length == shares.length, "Length mismatch");
-        
-        uint256 totalShares;
-        for (uint i = 0; i < shares.length; i++) {
-            totalShares += shares[i];
-        }
-        require(totalShares == 10000, "Shares must total 10000");
-        
-        splits[tokenId] = SplitConfig(recipients, shares);
+
+    modifier onlyAgentOwner(uint256 tokenId) {
+        INonFungibleAgents.AgentState memory state = nfa.getAgentState(tokenId);
+        require(msg.sender == state.owner, "Not agent owner");
+        _;
     }
-    
-    function executeSplit(uint256 tokenId) external payable {
-        SplitConfig memory config = splits[tokenId];
-        require(config.recipients.length > 0, "No split configured");
-        
-        uint256 total = msg.value;
-        for (uint i = 0; i < config.recipients.length; i++) {
-            uint256 amount = (total * config.shares[i]) / 10000;
-            (bool success, ) = payable(config.recipients[i]).call{value: amount}("");
-            require(success, "Transfer failed");
-        }
-        
-        emit FundsSplit(tokenId, total);
+
+    function configure(uint256 tokenId, uint256 threshold) external onlyAgentOwner(tokenId) {
+        strategies[tokenId] = StrategyConfig({
+            threshold: threshold,
+            lastExecuted: 0,
+            executionCount: 0,
+            enabled: true
+        });
+        emit StrategyConfigured(tokenId, threshold);
+    }
+
+    function execute(uint256 tokenId) external {
+        INonFungibleAgents.AgentState memory state = nfa.getAgentState(tokenId);
+        require(state.active, "Agent not active");
+
+        StrategyConfig storage config = strategies[tokenId];
+        require(config.enabled, "Strategy not enabled");
+        require(
+            block.timestamp >= config.lastExecuted + config.threshold,
+            "Too soon"
+        );
+
+        // Execute strategy logic here
+        // This is where you'd interact with DeFi protocols, oracles, etc.
+
+        config.lastExecuted = block.timestamp;
+        config.executionCount++;
+
+        emit StrategyExecuted(tokenId, block.timestamp);
+    }
+
+    function disable(uint256 tokenId) external onlyAgentOwner(tokenId) {
+        strategies[tokenId].enabled = false;
     }
 }
 ```
 
-**3. DeFi Strategy — Auto-compound pattern**
+### Pattern: Request Router
+
+A logic contract that forwards incoming requests to specialized handlers:
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
-interface IYieldProtocol {
-    function deposit(uint256 amount) external;
-    function withdraw(uint256 amount) external;
-    function claimRewards() external returns (uint256);
-    function balanceOf(address account) external view returns (uint256);
-}
+import "./INonFungibleAgents.sol";
 
-contract AgentDeFiStrategy {
-    address public immutable bap578;
-    IYieldProtocol public immutable yieldProtocol;
-    
-    mapping(uint256 => bool) public autoCompoundEnabled;
-    
-    event StrategyExecuted(uint256 indexed tokenId, string action, uint256 amount);
-    
-    constructor(address _bap578, address _yieldProtocol) {
-        bap578 = _bap578;
-        yieldProtocol = IYieldProtocol(_yieldProtocol);
+contract RouterLogic {
+    INonFungibleAgents public immutable nfa;
+
+    mapping(bytes4 => address) public handlers;
+    address public admin;
+
+    event RequestRouted(uint256 indexed tokenId, bytes4 selector, address handler);
+
+    constructor(address _nfa) {
+        nfa = INonFungibleAgents(_nfa);
+        admin = msg.sender;
     }
-    
-    function enableAutoCompound(uint256 tokenId) external {
-        (, , , , address owner) = IBAP578(bap578).getAgentState(tokenId);
-        require(msg.sender == owner, "Not agent owner");
-        autoCompoundEnabled[tokenId] = true;
+
+    function registerHandler(bytes4 selector, address handler) external {
+        require(msg.sender == admin, "Not admin");
+        require(handler.code.length > 0, "Handler must be contract");
+        handlers[selector] = handler;
     }
-    
-    function executeStrategy(uint256 tokenId) external {
-        require(autoCompoundEnabled[tokenId], "Auto-compound not enabled");
-        
-        // Claim rewards
-        uint256 rewards = yieldProtocol.claimRewards();
-        
-        if (rewards > 0) {
-            // Re-deposit rewards (auto-compound)
-            yieldProtocol.deposit(rewards);
-            emit StrategyExecuted(tokenId, "auto-compound", rewards);
-        }
+
+    function route(uint256 tokenId, bytes4 selector, bytes calldata data) external returns (bytes memory) {
+        INonFungibleAgents.AgentState memory state = nfa.getAgentState(tokenId);
+        require(state.active, "Agent not active");
+
+        address handler = handlers[selector];
+        require(handler != address(0), "No handler registered");
+
+        (bool success, bytes memory result) = handler.call(data);
+        require(success, "Handler execution failed");
+
+        emit RequestRouted(tokenId, selector, handler);
+        return result;
     }
 }
 ```
-
-#### Keeper / Automation Integration
-
-Logic contracts don't execute themselves. Use external triggers:
-
-| Trigger | Service | Best for |
-|---------|---------|----------|
-| Chainlink Automation | [automation.chain.link](https://automation.chain.link) | Production, reliable |
-| Gelato Network | [gelato.network](https://www.gelato.network) | Multi-chain, flexible |
-| Custom cron + script | Hardhat task / Node.js cron | Development, simple cases |
-| User-initiated | Frontend button | Interactive strategies |
-
-```javascript
-// Simple keeper script (Node.js)
-const { ethers } = require("ethers");
-
-async function runKeeper() {
-    const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
-    const wallet = new ethers.Wallet(KEEPER_KEY, provider);
-    const logic = new ethers.Contract(LOGIC_ADDRESS, LOGIC_ABI, wallet);
-    
-    // Execute strategy for agent #42 every hour
-    setInterval(async () => {
-        try {
-            const tx = await logic.executeStrategy(42);
-            await tx.wait();
-            console.log("Strategy executed for agent #42");
-        } catch (err) {
-            console.error("Execution failed:", err.message);
-        }
-    }, 3600000); // 1 hour
-}
-```
-
-### 4 · How can I trust it?
-
-Logic contract trust requires **extra vigilance** because the logic contract is external to BAP-578:
-
-| Trust check | How | Why |
-|-------------|-----|-----|
-| Source verified on BscScan | Check contract page for green checkmark | Readable, auditable code |
-| No admin backdoors | Review for `selfdestruct`, hidden `onlyOwner` functions | Prevent rug pulls |
-| No upgradeable proxy | Check if logic is behind a proxy | Proxy logic can change silently |
-| Access control | Verify it checks agent ownership for sensitive actions | Prevent unauthorized execution |
-| Fund handling | Check if it handles BNB — audit carefully | High-risk area |
-| Events emitted | Verify all actions emit events | Auditability |
-| Test coverage | Run logic contract tests | Functional correctness |
-
-**Red flags:**
-- 🔴 Logic contract is not verified on BscScan
-- 🔴 Logic contract has `selfdestruct`
-- 🔴 Logic contract is an upgradeable proxy (behavior can change)
-- 🔴 Logic contract has hidden admin functions
-- 🟡 Logic contract handles BNB without reentrancy protection
-- 🟡 Logic contract doesn't check agent ownership
-
-**In short:** "Trust a logic contract by verifying its source, auditing its functions, checking for backdoors, and confirming it respects agent ownership. BAP-578 validates that it's a contract — you must validate what the contract does."
 
 ---
 
-## Deployment Flow
+## Deployment and Binding Workflow
+
+### Step 1: Develop the logic contract
+
+Write the logic contract in Solidity. Test thoroughly using Hardhat.
 
 ```bash
-# 1. Write logic contract in contracts/logic/
-# 2. Compile
-npm run compile
-
-# 3. Deploy logic contract
-npx hardhat run scripts/deploy-logic.js --network testnet
-
-# 4. Verify on BscScan
-npx hardhat verify --network testnet LOGIC_ADDRESS CONSTRUCTOR_ARGS
-
-# 5. Bind to agent
-# Via interact CLI or frontend:
-await bap578.setLogicAddress(tokenId, LOGIC_ADDRESS);
+cd non-fungible-agents-BAP-578
+# Create logic contract in contracts/logic/
+# Write tests in test/logic/
+npm test
 ```
+
+### Step 2: Deploy the logic contract
+
+Deploy separately from the NFA contract:
+
+```js
+const GreeterLogic = await ethers.getContractFactory("GreeterLogic");
+const logic = await GreeterLogic.deploy(NFA_CONTRACT_ADDRESS);
+await logic.waitForDeployment();
+console.log("Logic deployed at:", await logic.getAddress());
+```
+
+### Step 3: Verify on block explorer
+
+Verify the logic contract source code so anyone can review it:
+
+```bash
+npx hardhat verify --network bscTestnet LOGIC_ADDRESS NFA_CONTRACT_ADDRESS
+```
+
+### Step 4: Bind to agent
+
+The token owner calls `setLogicAddress`:
+
+```js
+const nfa = await ethers.getContractAt("NonFungibleAgents", NFA_ADDRESS);
+await nfa.setLogicAddress(tokenId, LOGIC_ADDRESS);
+```
+
+### Step 5: Interact with the logic
+
+```js
+const logic = await ethers.getContractAt("GreeterLogic", LOGIC_ADDRESS);
+const greeting = await logic.greet(tokenId);
+console.log(greeting);
+```
+
+---
+
+## Security Considerations
+
+### What logic contracts CAN do
+
+- Read agent state and metadata from the NFA contract (public view functions)
+- Maintain their own state
+- Interact with other contracts (DeFi protocols, oracles, etc.)
+- Emit events
+- Receive and send ETH/BNB (if designed to)
+
+### What logic contracts CANNOT do (by default)
+
+- Withdraw from agent balance (only token owner via NFA contract)
+- Transfer the agent token (only token owner or approved)
+- Modify agent metadata (only token owner via NFA contract)
+- Pause or unpause the NFA contract (only contract owner)
+
+### Security checklist for logic contracts
+
+- [ ] Source code is verified on block explorer
+- [ ] No external calls to untrusted contracts without validation
+- [ ] No self-destruct pattern (prevents permanent loss)
+- [ ] Ownership checks reference the NFA contract's token ownership
+- [ ] No hidden admin functions that could manipulate state
+- [ ] Events emitted for all state-changing actions
+- [ ] Reentrancy guards on functions that send BNB
+- [ ] No upgradeable proxy unless explicitly required and documented
+- [ ] Gas limits considered for all loops and external calls
+
+### Risk assessment framework
+
+Before binding a logic contract, evaluate:
+
+1. **Source availability** — is the code open and verified?
+2. **Audit status** — has it been reviewed by security professionals?
+3. **Permissions** — what can this contract actually do?
+4. **Upgadeability** — can the logic contract be changed after binding?
+5. **Dependencies** — does it call other contracts that could be compromised?
+6. **Fund exposure** — can it move BNB or tokens on behalf of the agent?
+
+---
+
+## Logic Contract Marketplace (Future)
+
+A marketplace for logic contracts would allow:
+
+- **Discovery** — browse available logic contracts by category
+- **Verification** — verified source, audit status, usage statistics
+- **One-click binding** — bind a marketplace logic contract to your agent
+- **Reviews** — user ratings and reviews of logic contracts
+- **Revenue sharing** — logic contract developers earn fees
+
+Categories:
+- DeFi strategies (yield farming, rebalancing)
+- Social (agent-to-agent messaging, reputation)
+- Automation (scheduled tasks, event responses)
+- Analytics (on-chain monitoring, alerts)
+- Integration (bridge connectors, API proxies)
+
+---
+
+## Common Patterns and Anti-Patterns
+
+### Do: Read-only logic for information agents
+
+Logic contracts that only read state are inherently safe. They cannot modify anything and carry minimal risk.
+
+### Do: Use ownership checks that reference the NFA contract
+
+```solidity
+modifier onlyAgentOwner(uint256 tokenId) {
+    require(msg.sender == nfa.getAgentState(tokenId).owner, "Not owner");
+    _;
+}
+```
+
+### Don't: Allow arbitrary external calls
+
+```solidity
+// DANGEROUS — allows calling any contract with any data
+function execute(address target, bytes calldata data) external {
+    target.call(data);
+}
+```
+
+### Don't: Store agent funds in the logic contract
+
+Agent funds should stay in the NFA contract. If the logic contract holds funds, a bug or exploit in the logic contract could cause loss.
+
+### Do: Emit events for every action
+
+Events are the audit trail. Every meaningful action in the logic contract should emit an event with relevant parameters.
+
+---
+
+## Method-Agnostic AI Integration via Logic Contracts
+
+BAP-578's specification defines logic contracts as the **learning module layer** — the interface through which agents connect to AI systems. The standard provides infrastructure without prescribing specific implementations:
+
+### RAG (Retrieval-Augmented Generation) Pattern
+
+The logic contract queries the agent's vault content to provide context for AI generation:
+
+```solidity
+interface IRAGLogic {
+    function retrieveContext(uint256 tokenId, string calldata query) external view returns (string memory);
+    function generateWithContext(uint256 tokenId, string calldata query) external returns (string memory);
+}
+```
+
+Implementation: Logic contract reads `vaultURI` from agent metadata, fetches relevant documents, and passes them as context to an AI model via oracle or off-chain service.
+
+### MCP (Model Context Protocol) Pattern
+
+The logic contract routes agent interactions to different AI providers:
+
+```solidity
+interface IMCPLogic {
+    function routeToProvider(uint256 tokenId, string calldata input, string calldata provider) external returns (bytes memory);
+    function getAvailableProviders() external view returns (string[] memory);
+}
+```
+
+Implementation: Logic contract acts as a router, forwarding requests to registered AI service endpoints and returning structured responses.
+
+### Merkle Tree Learning Module
+
+The logic contract manages the agent's learning tree and updates the on-chain Merkle root:
+
+```solidity
+interface ILearningLogic {
+    function processInteraction(uint256 tokenId, bytes calldata interactionData) external returns (bytes32 newLearningNode);
+    function updateMerkleRoot(uint256 tokenId, bytes32 newRoot, bytes32[] calldata proof) external;
+    function verifyLearning(uint256 tokenId, bytes32 leaf, bytes32[] calldata proof) external view returns (bool);
+    function queryKnowledge(uint256 tokenId, string calldata query) external view returns (bytes memory);
+}
+```
+
+The learning pipeline: `interaction → learning extraction → tree building → Merkle root → on-chain update via updateAgentMetadata`.
+
+### Reinforcement Learning Pattern
+
+The logic contract stores reward signals and outcome data:
+
+```solidity
+interface IRLLogic {
+    function recordOutcome(uint256 tokenId, bytes32 actionId, int256 reward) external;
+    function getRecommendation(uint256 tokenId, bytes calldata context) external view returns (bytes memory);
+}
+```
+
+### Hybrid Pattern
+
+Combine multiple approaches in a single logic contract:
+
+```solidity
+contract HybridLearningLogic is IRAGLogic, ILearningLogic, IRLLogic {
+    // RAG for knowledge retrieval
+    // Merkle tree for verifiable learning state
+    // RL for action optimization
+    // All behind the single logicAddress binding
+}
+```
+
+---
+
+## Output Format
+
+When asked for logic contract help, respond with:
+
+1. **Behavior goal** (what should the agent do?)
+2. **Contract architecture** (interfaces, state, functions)
+3. **Complete Solidity code** (compilable, with comments)
+4. **Security constraints** (what to check before binding)
+5. **Deployment steps** (compile, deploy, verify, bind)
+6. **Testing guidance** (what to test and expected outcomes)
 
 ---
 
 ## Related Skills
 
-- **`bap578`** — Core contract spec and `setLogicAddress` function reference
-- **`bap578-security-audit`** — Auditing logic contracts for vulnerabilities
-- **`bap578-metadata-design`** — Designing the identity that the logic contract serves
+- `bap578`
+- `bap578-security-audit`
+- `bap578-upgrade`

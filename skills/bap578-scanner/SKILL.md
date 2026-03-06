@@ -1,388 +1,646 @@
 ---
 id: bap578-scanner
-name: BAP-578 Agent Scanner
+name: BAP-578 On-Chain Scanner
 description: >
-  Scan, explore, verify, and audit BAP-578 Non-Fungible Agents on BNB Chain.
-  Look up agents by token ID or owner, verify contract source, audit event
-  history, check vault integrity, monitor agent activity, and detect risks.
-  Use when investigating, verifying, or analyzing NFA agents on-chain.
+  Scan, query, and verify BAP-578 Non-Fungible Agents on BNB Chain using
+  ethers.js, viem, or direct RPC. Covers reading agent state, metadata,
+  event history, vault verification, bulk scanning, and building indexers.
+  Use when investigating agent data or building monitoring tools.
 category: BAP-578
 author: community
 version: 1.0.0
 examples:
-  - "Look up BAP-578 agent #42"
-  - "Verify the NFA contract on BscScan"
-  - "Show all agents owned by this address"
-  - "Audit the event history for agent #7"
-  - "Is this agent trustworthy?"
-  - "Check if agent metadata is authentic"
-  - "Scan for suspicious agent activity"
+  - "Scan a BAP-578 agent by token ID"
+  - "Read on-chain metadata for an NFA agent"
+  - "Verify vault integrity for a BAP-578 agent"
+  - "List all agents owned by an address"
+  - "Get the event history for a specific agent"
+  - "Build an indexer for BAP-578 events"
+  - "How many agents have been minted?"
 ---
 
-# BAP-578 Agent Scanner
+# BAP-578 On-Chain Scanner
 
-Use this skill when users want to look up, verify, audit, or investigate BAP-578 Non-Fungible Agents on BNB Chain. This is the **trust and transparency** skill — it turns raw on-chain data into actionable intelligence about any agent.
-
----
-
-## The Four Identity Questions — Scanner Perspective
-
-### 1 · Who are you?
-
-I am the **scanner and verifier** for BAP-578 agents. I answer the question every user asks before trusting an agent: **"Is this agent real, and is it what it claims to be?"**
-
-I can:
-- Look up any agent by token ID, owner address, or contract address.
-- Show the full identity profile: persona, experience, logic contract, owner, creation date.
-- Cross-reference on-chain data with off-chain claims.
-- Flag discrepancies between what an agent says and what the chain shows.
-
-**In short:** "I am the detective. I read the chain so you don't have to."
-
-### 2 · What do you remember?
-
-I read and index the **complete on-chain history** of any BAP-578 agent:
-
-| Data source | What I extract | Tool |
-|-------------|---------------|------|
-| Contract state | Current owner, balance, status, logic address, metadata | `getAgentState` / `getAgentMetadata` |
-| Event logs | Full lifecycle: creation, funding, withdrawals, status changes, metadata updates | BscScan event tab / `eth_getLogs` |
-| Token transfers | Ownership history (paid agents only — free mints are non-transferable) | ERC-721 `Transfer` events |
-| Vault hash | On-chain integrity anchor for off-chain data | `getAgentMetadata` → `vaultHash` |
-| Free-mint status | Whether the agent was free-minted (soulbound) | `isFreeMint(tokenId)` |
-| Treasury flows | Where mint fees went | `AgentCreated` events + treasury address |
-
-**I remember everything the chain remembers.** My output is only as fresh as the last confirmed block.
-
-### 3 · What can you do?
-
-#### Agent Lookup
-
-| Query | How | What you get |
-|-------|-----|-------------|
-| By token ID | `getAgentState(tokenId)` + `getAgentMetadata(tokenId)` | Full agent profile |
-| By owner address | `tokensOfOwner(address)` | All agents owned by that address |
-| By contract address | Check if address matches known BAP-578 proxy | Contract verification status |
-| Total supply | `getTotalSupply()` | How many agents exist |
-
-#### Contract Verification
-
-| Check | Method | Pass criteria |
-|-------|--------|--------------|
-| Source code verified | BscScan → Contract tab → green checkmark | Source matches bytecode |
-| Proxy pattern | Check ERC-1967 implementation slot | Valid UUPS proxy |
-| OpenZeppelin base | Source imports from `@openzeppelin/contracts-upgradeable` | Battle-tested libraries |
-| Owner identity | `owner()` → check if multisig or EOA | Multisig preferred for production |
-| Pause state | `paused()` | `false` for normal operation |
-
-#### Event Audit
-
-Reconstruct the full history of any agent:
-
-```
-Agent #42 Timeline:
-├─ Block 38201000: AgentCreated (owner: 0xABC..., logic: 0x000...)
-├─ Block 38201500: AgentFunded (amount: 0.5 BNB)
-├─ Block 38205000: MetadataUpdated
-├─ Block 38210000: AgentStatusChanged (active: false)
-├─ Block 38215000: AgentStatusChanged (active: true)
-├─ Block 38220000: AgentFunded (amount: 1.0 BNB)
-└─ Block 38225000: AgentWithdraw (amount: 0.3 BNB)
-```
-
-#### Vault Integrity Check
-
-```
-Vault Verification for Agent #42:
-  vaultURI:  ipfs://QmXyz...
-  vaultHash: 0xabc123...
-  Fetched content hash: 0xabc123...
-  ✅ MATCH — vault content is authentic
-```
-
-Or:
-
-```
-  Fetched content hash: 0xdef456...
-  ❌ MISMATCH — vault content has been tampered with or is outdated
-```
-
-#### Risk Detection
-
-| Risk signal | What it means | Severity |
-|-------------|--------------|----------|
-| Logic address points to unverified contract | Agent behavior is opaque | 🔴 High |
-| Logic address is an EOA | Invalid — contract rejects this, but check older versions | 🔴 High |
-| Owner is an EOA (not multisig) | Single point of failure for admin functions | 🟡 Medium |
-| Contract is paused | No minting or funding possible | 🟡 Medium |
-| Vault hash is zero bytes | No off-chain data integrity anchor | 🟡 Medium |
-| Vault URI unreachable | Off-chain data unavailable | 🟡 Medium |
-| Vault content hash mismatch | Tampered or stale off-chain data | 🔴 High |
-| Agent balance is very high | Potential target for attacks | 🟡 Medium |
-| Many rapid metadata updates | Possible identity spoofing | 🟡 Medium |
-| Free-minted but claims transferability | Contradiction — free mints are soulbound | 🔴 High |
-
-### 4 · How can I trust it?
-
-**This skill IS the trust layer.** Here's how the scanner itself earns trust:
-
-- **All data comes directly from the chain** — I read via RPC calls to the BAP-578 proxy. No intermediary database, no cache, no API that could be spoofed.
-- **Verification is deterministic** — vault hash comparison uses `keccak256`. Same input always produces same output.
-- **Event logs are immutable** — once emitted, events cannot be altered or deleted.
-- **I flag what I can't verify** — if a vault URI is unreachable or a logic contract is unverified, I say so explicitly. I never assume trust.
-- **I show the raw data** — every claim I make is backed by a specific contract call or event log that anyone can reproduce.
-
-**In short:** "Trust me because I show my work. Every answer links back to a verifiable on-chain source."
+Use this skill to read, verify, and index BAP-578 agent data directly from the blockchain. This covers single-agent lookups, bulk scanning, event indexing, vault integrity checks, and building automated monitoring pipelines.
 
 ---
 
-## How to Scan an Agent (Step-by-Step)
+## When to use this skill
 
-### Quick Scan (30 seconds)
+- Looking up a specific agent's identity, state, or metadata by token ID.
+- Listing all agents owned by a particular address.
+- Verifying that off-chain vault content matches the on-chain hash.
+- Building an event indexer or monitoring pipeline for BAP-578.
+- Auditing agent histories through event reconstruction.
+- Answering questions like "how many agents exist?" or "what's the TVL?"
 
-```bash
-# Using cast (from Foundry) or any Web3 tool
-# Replace PROXY_ADDRESS and TOKEN_ID
+---
 
-# 1. Get agent state
-cast call $PROXY_ADDRESS "getAgentState(uint256)" $TOKEN_ID --rpc-url https://bsc-dataseed.binance.org/
+## The Four Identity Questions (Scanner View)
 
-# 2. Get agent metadata
-cast call $PROXY_ADDRESS "getAgentMetadata(uint256)" $TOKEN_ID --rpc-url https://bsc-dataseed.binance.org/
+### 1) Who are you?
 
-# 3. Check if free-minted
-cast call $PROXY_ADDRESS "isFreeMint(uint256)" $TOKEN_ID --rpc-url https://bsc-dataseed.binance.org/
+The scanner reveals the full on-chain identity of any agent. By calling `getAgentState` and `getAgentMetadata`, you retrieve the complete profile:
 
-# 4. Get all agents for an owner
-cast call $PROXY_ADDRESS "tokensOfOwner(address)" $OWNER_ADDRESS --rpc-url https://bsc-dataseed.binance.org/
+- Token ID (the unique agent identifier)
+- Owner address (who controls this agent)
+- Persona (JSON-encoded character definition)
+- Experience (plain-text domain expertise)
+- Logic address (optional behavior contract)
+- Active status (operational or dormant)
+- Creation timestamp (when the agent was minted)
+- Balance (BNB held by the agent)
+
+This is the authoritative identity. Any off-chain representation should match these fields.
+
+### 2) What do you remember?
+
+The scanner can reconstruct the complete history of an agent by querying on-chain events:
+
+- **AgentCreated** — when and how the agent was born (minter, initial metadata)
+- **AgentFunded** — every BNB deposit with amount and sender
+- **AgentWithdraw** — every withdrawal with amount
+- **AgentStatusChanged** — every active/inactive toggle
+- **MetadataUpdated** — every identity change (new persona, vault, etc.)
+
+Additionally, the scanner can verify extended memory by fetching `vaultURI` content and comparing its keccak256 hash against the on-chain `vaultHash`. This proves whether the off-chain data is authentic.
+
+### 3) What can you do?
+
+The scanner performs read-only operations. It does not modify state. Capabilities include:
+
+- Single agent lookup (state + metadata)
+- Owner portfolio listing (all tokens owned by an address)
+- Total supply query
+- Free mint status check
+- Event history reconstruction
+- Vault content verification
+- Bulk scanning across token ID ranges
+- Aggregate metrics computation (TVL, active count, mint velocity)
+
+### 4) How can I trust it?
+
+Scanner results come directly from the blockchain via RPC calls. Trust is established by:
+
+- Reading from the canonical contract address (verified on block explorer)
+- Using authenticated RPC endpoints
+- Cross-referencing event data with state reads
+- Verifying vault hashes independently
+- All data is publicly verifiable by anyone with an RPC connection
+
+---
+
+## Contract Interface for Scanning
+
+### View Functions Used
+
+```
+getAgentState(tokenId)     → (balance, active, logicAddress, createdAt, owner)
+getAgentMetadata(tokenId)  → (persona, experience, voiceHash, animationURI, vaultURI, vaultHash)
+tokensOfOwner(address)     → uint256[]
+getTotalSupply()           → uint256
+getFreeMints(user)         → uint256
+isFreeMint(tokenId)        → bool
+tokenURI(tokenId)          → string
+ownerOf(tokenId)           → address
 ```
 
-### Deep Scan (BscScan)
+### Events Indexed
 
-1. **Go to the proxy contract page** on BscScan: `https://bscscan.com/address/{PROXY_ADDRESS}`
-2. **Check verification** — look for the green checkmark ✓ on the Contract tab.
-3. **Read Contract** → call `getAgentState` and `getAgentMetadata` with the token ID.
-4. **Events tab** → filter by token ID to see the full history.
-5. **Internal Txns** → check fund flows (deposits, withdrawals, treasury payments).
+```
+AgentCreated(tokenId, owner, logicAddress, metadataURI)
+AgentFunded(tokenId, funder, amount)
+AgentWithdraw(tokenId, owner, amount)
+AgentStatusChanged(tokenId, active)
+MetadataUpdated(tokenId, newURI)
+Transfer(from, to, tokenId)  // ERC-721 standard
+```
 
-### Programmatic Scan (JavaScript)
+---
 
-```javascript
+## Scanning with ethers.js
+
+### Setup
+
+```js
 const { ethers } = require("ethers");
 
-const provider = new ethers.providers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
-const BAP578_ABI = [ /* use ABI from bap578 config */ ];
-const contract = new ethers.Contract(PROXY_ADDRESS, BAP578_ABI, provider);
+const provider = new ethers.JsonRpcProvider(process.env.BSC_RPC_URL);
+const BAP578_ADDRESS = process.env.BAP578_ADDRESS;
+const BAP578_ABI = require("./abi/BAP578.json");
 
+const contract = new ethers.Contract(BAP578_ADDRESS, BAP578_ABI, provider);
+```
+
+### Single agent lookup
+
+```js
 async function scanAgent(tokenId) {
-  console.log(`\n🔍 Scanning Agent #${tokenId}...\n`);
-
-  // State
   const state = await contract.getAgentState(tokenId);
-  console.log("Owner:", state.owner);
-  console.log("Active:", state.active);
-  console.log("Balance:", ethers.utils.formatEther(state.balance), "BNB");
-  console.log("Logic:", state.logicAddress);
-  console.log("Created:", new Date(state.createdAt * 1000).toISOString());
+  const metadata = await contract.getAgentMetadata(tokenId);
+  const uri = await contract.tokenURI(tokenId);
+  const freeMint = await contract.isFreeMint(tokenId);
 
-  // Metadata
-  const [metadata, uri] = await contract.getAgentMetadata(tokenId);
-  console.log("\nMetadata URI:", uri);
-  console.log("Persona:", metadata.persona);
-  console.log("Experience:", metadata.experience);
-  console.log("Voice Hash:", metadata.voiceHash);
-  console.log("Vault URI:", metadata.vaultURI);
-  console.log("Vault Hash:", metadata.vaultHash);
-
-  // Free mint check
-  const isFree = await contract.isFreeMint(tokenId);
-  console.log("\nFree Minted:", isFree);
-  console.log("Transferable:", !isFree);
-
-  // Risk assessment
-  console.log("\n⚠️ Risk Assessment:");
-  if (state.logicAddress !== ethers.constants.AddressZero) {
-    const code = await provider.getCode(state.logicAddress);
-    if (code === "0x") {
-      console.log("🔴 Logic address has no code (destroyed or invalid)");
-    } else {
-      console.log("🟡 Logic address has code — verify manually on BscScan");
-    }
-  }
-  if (metadata.vaultHash === ethers.constants.HashZero) {
-    console.log("🟡 No vault hash set — off-chain data is unanchored");
-  }
-  if (state.balance.gt(ethers.utils.parseEther("10"))) {
-    console.log("🟡 High balance agent — potential target");
-  }
-}
-
-async function scanOwner(ownerAddress) {
-  const tokens = await contract.tokensOfOwner(ownerAddress);
-  console.log(`\n📦 ${ownerAddress} owns ${tokens.length} agents:`);
-  for (const tokenId of tokens) {
-    await scanAgent(tokenId.toNumber());
-  }
-}
-
-async function auditEvents(tokenId, fromBlock = 0) {
-  console.log(`\n📜 Event History for Agent #${tokenId}:\n`);
-
-  const filter = contract.filters.AgentCreated(tokenId);
-  const createdEvents = await contract.queryFilter(filter, fromBlock);
-  for (const e of createdEvents) {
-    console.log(`Block ${e.blockNumber}: AgentCreated by ${e.args.owner}`);
-  }
-
-  const fundFilter = contract.filters.AgentFunded(tokenId);
-  const fundEvents = await contract.queryFilter(fundFilter, fromBlock);
-  for (const e of fundEvents) {
-    console.log(`Block ${e.blockNumber}: AgentFunded ${ethers.utils.formatEther(e.args.amount)} BNB`);
-  }
-
-  const withdrawFilter = contract.filters.AgentWithdraw(tokenId);
-  const withdrawEvents = await contract.queryFilter(withdrawFilter, fromBlock);
-  for (const e of withdrawEvents) {
-    console.log(`Block ${e.blockNumber}: AgentWithdraw ${ethers.utils.formatEther(e.args.amount)} BNB`);
-  }
-
-  const statusFilter = contract.filters.AgentStatusChanged(tokenId);
-  const statusEvents = await contract.queryFilter(statusFilter, fromBlock);
-  for (const e of statusEvents) {
-    console.log(`Block ${e.blockNumber}: AgentStatusChanged active=${e.args.active}`);
-  }
-
-  const metaFilter = contract.filters.MetadataUpdated(tokenId);
-  const metaEvents = await contract.queryFilter(metaFilter, fromBlock);
-  for (const e of metaEvents) {
-    console.log(`Block ${e.blockNumber}: MetadataUpdated`);
-  }
+  return {
+    tokenId,
+    owner: state.owner,
+    balance: ethers.formatEther(state.balance),
+    active: state.active,
+    logicAddress: state.logicAddress,
+    createdAt: new Date(Number(state.createdAt) * 1000).toISOString(),
+    persona: metadata.persona,
+    experience: metadata.experience,
+    voiceHash: metadata.voiceHash,
+    animationURI: metadata.animationURI,
+    vaultURI: metadata.vaultURI,
+    vaultHash: metadata.vaultHash,
+    tokenURI: uri,
+    isFreeMint: freeMint,
+  };
 }
 ```
 
-### Vault Verification
+### Owner portfolio scan
 
-```javascript
-const crypto = require("crypto");
-const fetch = require("node-fetch");
-
-async function verifyVault(tokenId) {
-  const [metadata] = await contract.getAgentMetadata(tokenId);
-
-  if (!metadata.vaultURI) {
-    console.log("⚠️ No vault URI set");
-    return;
+```js
+async function scanOwnerPortfolio(ownerAddress) {
+  const tokenIds = await contract.tokensOfOwner(ownerAddress);
+  const agents = [];
+  for (const id of tokenIds) {
+    agents.push(await scanAgent(id));
   }
+  return { owner: ownerAddress, agentCount: agents.length, agents };
+}
+```
 
-  if (metadata.vaultHash === ethers.constants.HashZero) {
-    console.log("⚠️ Vault hash is zero — no integrity anchor");
-    return;
+### Bulk scan (all agents)
+
+```js
+async function scanAllAgents() {
+  const totalSupply = await contract.getTotalSupply();
+  const agents = [];
+  for (let i = 1; i <= Number(totalSupply); i++) {
+    try {
+      agents.push(await scanAgent(i));
+    } catch (e) {
+      console.warn(`Token ${i} not found or burned`);
+    }
+  }
+  return agents;
+}
+```
+
+### Aggregate metrics
+
+```js
+async function computeMetrics() {
+  const agents = await scanAllAgents();
+  const totalSupply = agents.length;
+  const activeCount = agents.filter((a) => a.active).length;
+  const uniqueOwners = new Set(agents.map((a) => a.owner)).size;
+  const totalBalance = agents.reduce(
+    (sum, a) => sum + parseFloat(a.balance),
+    0
+  );
+  const freeMintCount = agents.filter((a) => a.isFreeMint).length;
+  const paidMintCount = totalSupply - freeMintCount;
+  const withLogic = agents.filter(
+    (a) => a.logicAddress !== ethers.ZeroAddress
+  ).length;
+
+  return {
+    totalSupply,
+    activeCount,
+    inactiveCount: totalSupply - activeCount,
+    uniqueOwners,
+    tvl: totalBalance.toFixed(4) + " BNB",
+    freeMintCount,
+    paidMintCount,
+    agentsWithLogic: withLogic,
+  };
+}
+```
+
+---
+
+## Scanning with viem
+
+### Setup
+
+```ts
+import { createPublicClient, http } from "viem";
+import { bsc } from "viem/chains";
+
+const client = createPublicClient({
+  chain: bsc,
+  transport: http(process.env.BSC_RPC_URL),
+});
+```
+
+### Read agent state
+
+```ts
+const state = await client.readContract({
+  address: BAP578_ADDRESS,
+  abi: BAP578_ABI,
+  functionName: "getAgentState",
+  args: [tokenId],
+});
+```
+
+### Read events
+
+```ts
+const events = await client.getContractEvents({
+  address: BAP578_ADDRESS,
+  abi: BAP578_ABI,
+  eventName: "AgentCreated",
+  fromBlock: deploymentBlock,
+  toBlock: "latest",
+});
+```
+
+---
+
+## Vault Integrity Verification
+
+The vault is the off-chain memory layer. Verification ensures it has not been tampered with.
+
+### Verification algorithm
+
+```js
+const { keccak256, toUtf8Bytes } = require("ethers");
+
+async function verifyVault(vaultURI, onChainHash) {
+  if (onChainHash === ethers.ZeroHash) {
+    return { verified: false, reason: "No vault hash registered (zero hash)" };
   }
 
   try {
-    const response = await fetch(metadata.vaultURI.replace("ipfs://", "https://ipfs.io/ipfs/"));
-    const content = await response.text();
-    const computedHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(content));
-
-    if (computedHash === metadata.vaultHash) {
-      console.log("✅ Vault content is AUTHENTIC");
-    } else {
-      console.log("❌ Vault content MISMATCH — tampered or outdated");
-      console.log("  On-chain hash:", metadata.vaultHash);
-      console.log("  Computed hash:", computedHash);
+    const response = await fetch(vaultURI);
+    if (!response.ok) {
+      return { verified: false, reason: `Fetch failed: ${response.status}` };
     }
-  } catch (err) {
-    console.log("❌ Could not fetch vault content:", err.message);
+
+    const content = await response.text();
+    const computedHash = keccak256(toUtf8Bytes(content));
+
+    if (computedHash === onChainHash) {
+      return { verified: true, contentLength: content.length };
+    } else {
+      return {
+        verified: false,
+        reason: "Hash mismatch — content may have been modified",
+        expected: onChainHash,
+        computed: computedHash,
+      };
+    }
+  } catch (error) {
+    return { verified: false, reason: `Error: ${error.message}` };
   }
+}
+```
+
+### Verification states
+
+- **Verified** — hash matches; off-chain data is authentic.
+- **Hash mismatch** — content has been modified since registration.
+- **Zero hash** — no vault data was registered; skip verification.
+- **Fetch error** — URI unreachable; vault may be offline.
+
+---
+
+## Event Indexing
+
+### Building a simple indexer
+
+```js
+async function indexAllEvents(fromBlock = 0n) {
+  const eventNames = [
+    "AgentCreated",
+    "AgentFunded",
+    "AgentWithdraw",
+    "AgentStatusChanged",
+    "MetadataUpdated",
+  ];
+
+  const allEvents = [];
+
+  for (const eventName of eventNames) {
+    const events = await contract.queryFilter(
+      contract.filters[eventName](),
+      fromBlock,
+      "latest"
+    );
+
+    for (const event of events) {
+      allEvents.push({
+        eventName,
+        blockNumber: event.blockNumber,
+        transactionHash: event.transactionHash,
+        args: event.args,
+        timestamp: null, // fetch block timestamp if needed
+      });
+    }
+  }
+
+  // Sort by block number
+  allEvents.sort((a, b) => a.blockNumber - b.blockNumber);
+  return allEvents;
+}
+```
+
+### Reconstructing agent history
+
+```js
+async function getAgentHistory(tokenId) {
+  const allEvents = await indexAllEvents();
+  return allEvents.filter((e) => {
+    const args = e.args;
+    return args.tokenId && args.tokenId.toString() === tokenId.toString();
+  });
+}
+```
+
+### Real-time monitoring
+
+```js
+function watchAgentEvents() {
+  contract.on("AgentCreated", (tokenId, owner, logicAddress, metadataURI) => {
+    console.log(`New agent #${tokenId} minted by ${owner}`);
+  });
+
+  contract.on("AgentFunded", (tokenId, funder, amount) => {
+    console.log(
+      `Agent #${tokenId} funded ${ethers.formatEther(amount)} BNB by ${funder}`
+    );
+  });
+
+  contract.on("AgentWithdraw", (tokenId, owner, amount) => {
+    console.log(
+      `Agent #${tokenId} withdrew ${ethers.formatEther(amount)} BNB`
+    );
+  });
+
+  contract.on("AgentStatusChanged", (tokenId, active) => {
+    console.log(`Agent #${tokenId} status → ${active ? "active" : "inactive"}`);
+  });
+
+  contract.on("MetadataUpdated", (tokenId, newURI) => {
+    console.log(`Agent #${tokenId} metadata updated → ${newURI}`);
+  });
 }
 ```
 
 ---
 
-## Scan Report Template
+## Common Scan Patterns
 
-When reporting scan results to users, use this format:
+### Check if a token exists
 
+```js
+try {
+  await contract.ownerOf(tokenId);
+  // Token exists
+} catch {
+  // Token does not exist or was burned
+}
 ```
-═══════════════════════════════════════════
-  BAP-578 Agent Scan Report — Agent #42
-═══════════════════════════════════════════
 
-🤖 IDENTITY
-  Token ID:       42
-  Owner:          0xABC...123
-  Experience:     Financial advisor agent
-  Persona:        {"traits": ["analytical"], "style": "formal"}
-  Logic Contract: 0x000...000 (none)
-  Created:        2026-01-15 14:30:00 UTC
+### Find agents with logic contracts
 
-🧠 MEMORY
-  Metadata URI:   ipfs://QmXyz...
-  Vault URI:      ipfs://QmAbc...
-  Vault Hash:     0xdef789...
-  Voice Hash:     voice_pro_001
-  Animation URI:  (none)
+```js
+const agents = await scanAllAgents();
+const withLogic = agents.filter(
+  (a) => a.logicAddress !== ethers.ZeroAddress
+);
+```
 
-⚡ STATUS
-  Active:         Yes
-  Balance:        1.5 BNB
-  Free Minted:    No (transferable)
-  Total Events:   7
+### Find inactive agents with balance
 
-🔒 TRUST VERIFICATION
-  Contract verified on BscScan:  ✅
-  Vault integrity:               ✅ MATCH
-  Logic address valid:           ✅ (none set)
-  Owner is multisig:             ❌ (EOA)
-  Contract paused:               No
+```js
+const atRisk = agents.filter(
+  (a) => !a.active && parseFloat(a.balance) > 0
+);
+```
 
-⚠️ RISK SIGNALS
-  🟡 Owner is an EOA — recommend multisig for production
-  ✅ No other risks detected
+### Find recently created agents
 
-═══════════════════════════════════════════
+```js
+const recentEvents = await contract.queryFilter(
+  contract.filters.AgentCreated(),
+  -1000 // last 1000 blocks
+);
 ```
 
 ---
 
-## Common Scan Queries
+## Output Format
 
-| User asks | What to do |
-|-----------|-----------|
-| "Is agent #X real?" | `getAgentState(X)` — if it reverts, token doesn't exist |
-| "Who owns agent #X?" | `getAgentState(X)` → `owner` field |
-| "How many agents does 0xABC own?" | `tokensOfOwner(0xABC)` → count |
-| "Was agent #X free-minted?" | `isFreeMint(X)` |
-| "Can I transfer agent #X?" | Check `isFreeMint(X)` — if true, non-transferable |
-| "How much BNB does agent #X hold?" | `getAgentState(X)` → `balance` |
-| "Is the contract paused?" | `paused()` on the proxy |
-| "Who is the contract admin?" | `owner()` on the proxy |
-| "Has agent #X been modified?" | Query `MetadataUpdated` events for token X |
-| "Is the vault data authentic?" | Fetch `vaultURI`, hash it, compare to `vaultHash` |
-| "How many agents exist?" | `getTotalSupply()` |
-| "What happened to agent #X?" | Full event audit: Created, Funded, Withdraw, Status, Metadata |
+When asked for scanning help, respond with:
+
+1. **What to scan** (single agent, portfolio, bulk, events)
+2. **Complete code** (setup + query + processing)
+3. **Expected output shape** (JSON structure)
+4. **Verification steps** (how to cross-check results)
+5. **Performance notes** (rate limits, batching for bulk scans)
 
 ---
 
-## BscScan Quick Links
+## Data Export Formats
 
-For any deployed BAP-578 contract at `{ADDRESS}`:
+### JSON export (single agent)
 
-| Page | URL |
-|------|-----|
-| Contract overview | `https://bscscan.com/address/{ADDRESS}` |
-| Read contract | `https://bscscan.com/address/{ADDRESS}#readProxyContract` |
-| Write contract | `https://bscscan.com/address/{ADDRESS}#writeProxyContract` |
-| Events | `https://bscscan.com/address/{ADDRESS}#events` |
-| Internal txns | `https://bscscan.com/address/{ADDRESS}#internaltx` |
-| Token transfers | `https://bscscan.com/token/{ADDRESS}` |
+```json
+{
+  "tokenId": 17,
+  "owner": "0xABC...",
+  "balance": "1.5",
+  "balanceUnit": "BNB",
+  "active": true,
+  "logicAddress": "0xDEF...",
+  "createdAt": "2026-03-01T10:00:00Z",
+  "persona": {"name": "Atlas", "traits": ["analytical"]},
+  "experience": "Financial analyst specializing in DeFi",
+  "voiceHash": "",
+  "animationURI": "ipfs://QmAnim...",
+  "vaultURI": "ipfs://QmVault...",
+  "vaultHash": "0xabc123...",
+  "vaultVerified": true,
+  "isFreeMint": false,
+  "tokenURI": "ipfs://QmMeta...",
+  "history": [
+    {"event": "AgentCreated", "block": 12345, "tx": "0x...", "timestamp": "2026-03-01T10:00:00Z"},
+    {"event": "AgentFunded", "block": 12400, "tx": "0x...", "amount": "1.0 BNB"},
+    {"event": "MetadataUpdated", "block": 12500, "tx": "0x...", "newURI": "ipfs://QmNew..."}
+  ]
+}
+```
 
-For testnet, replace `bscscan.com` with `testnet.bscscan.com`.
+### CSV export (bulk scan)
+
+```
+tokenId,owner,balance,active,logicAddress,createdAt,experience,isFreeMint
+1,0xABC...,0.5,true,0x0000...,2026-03-01,DeFi analyst,true
+2,0xDEF...,1.2,true,0xLOGIC...,2026-03-02,Research bot,false
+3,0x123...,0.0,false,0x0000...,2026-03-03,Support agent,true
+```
+
+### Generating CSV from scan results
+
+```js
+function toCSV(agents) {
+  const header = "tokenId,owner,balance,active,logicAddress,createdAt,experience,isFreeMint";
+  const rows = agents.map(a =>
+    `${a.tokenId},${a.owner},${a.balance},${a.active},${a.logicAddress},${a.createdAt},${a.experience.replace(/,/g, ";")},${a.isFreeMint}`
+  );
+  return [header, ...rows].join("\n");
+}
+```
+
+---
+
+## Advanced Scan Patterns
+
+### Ownership concentration analysis
+
+Detect whether a small number of addresses control most agents:
+
+```js
+function analyzeConcentration(agents) {
+  const ownerCounts = {};
+  for (const a of agents) {
+    ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
+  }
+  
+  const sorted = Object.entries(ownerCounts)
+    .sort(([,a], [,b]) => b - a);
+  
+  const totalAgents = agents.length;
+  const top10 = sorted.slice(0, 10);
+  const top10Count = top10.reduce((sum, [, c]) => sum + c, 0);
+  
+  return {
+    totalOwners: sorted.length,
+    top10Owners: top10.map(([addr, count]) => ({
+      address: addr,
+      count,
+      percentage: ((count / totalAgents) * 100).toFixed(1) + "%"
+    })),
+    top10Concentration: ((top10Count / totalAgents) * 100).toFixed(1) + "%"
+  };
+}
+```
+
+### Agent health scoring
+
+Assign a health score to each agent based on multiple factors:
+
+```js
+function scoreAgentHealth(agent) {
+  let score = 0;
+  
+  // Active status (30 points)
+  if (agent.active) score += 30;
+  
+  // Has balance (20 points, scaled)
+  const balance = parseFloat(agent.balance);
+  if (balance > 0) score += Math.min(20, balance * 10);
+  
+  // Has persona (15 points)
+  try {
+    const persona = JSON.parse(agent.persona);
+    if (persona.name) score += 10;
+    if (persona.traits && persona.traits.length > 0) score += 5;
+  } catch {}
+  
+  // Has experience (10 points)
+  if (agent.experience && agent.experience.length > 10) score += 10;
+  
+  // Has logic contract (15 points)
+  if (agent.logicAddress !== ethers.ZeroAddress) score += 15;
+  
+  // Has vault (10 points)
+  if (agent.vaultURI && agent.vaultURI.length > 0) score += 5;
+  if (agent.vaultHash !== ethers.ZeroHash) score += 5;
+  
+  return { tokenId: agent.tokenId, score, maxScore: 100 };
+}
+```
+
+### Time-series analysis
+
+Track how metrics change over time by bucketing events:
+
+```js
+function mintTimeSeries(events, interval = "day") {
+  const buckets = {};
+  const created = events.filter(e => e.name === "AgentCreated");
+  
+  for (const event of created) {
+    const date = new Date(event.timestamp);
+    let key;
+    if (interval === "day") key = date.toISOString().split("T")[0];
+    else if (interval === "week") {
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay());
+      key = weekStart.toISOString().split("T")[0];
+    } else if (interval === "month") {
+      key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    }
+    buckets[key] = (buckets[key] || 0) + 1;
+  }
+  
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([period, count]) => ({ period, count }));
+}
+```
+
+### Funding flow analysis
+
+Track net funding per agent over time:
+
+```js
+function fundingFlow(events) {
+  const flows = {};
+  
+  for (const event of events) {
+    if (event.name === "AgentFunded") {
+      const id = event.args.tokenId;
+      flows[id] = flows[id] || { inflow: 0, outflow: 0 };
+      flows[id].inflow += parseFloat(event.args.amount);
+    } else if (event.name === "AgentWithdraw") {
+      const id = event.args.tokenId;
+      flows[id] = flows[id] || { inflow: 0, outflow: 0 };
+      flows[id].outflow += parseFloat(event.args.amount);
+    }
+  }
+  
+  return Object.entries(flows).map(([tokenId, flow]) => ({
+    tokenId,
+    inflow: flow.inflow.toFixed(4) + " BNB",
+    outflow: flow.outflow.toFixed(4) + " BNB",
+    netFlow: (flow.inflow - flow.outflow).toFixed(4) + " BNB"
+  }));
+}
+```
+
+---
+
+## Performance Considerations
+
+- **Rate limiting:** Public RPC endpoints have request limits. Use batched calls or a dedicated RPC provider for bulk scanning.
+- **Block range limits:** Some providers limit `getLogs` block ranges. Paginate event queries in chunks of 5000-10000 blocks.
+- **Caching:** Cache agent state reads for dashboard UIs. Invalidate on new events.
+- **Parallel reads:** Use `Promise.all` for independent agent lookups, but respect rate limits.
+- **Incremental indexing:** Store the last indexed block number and resume from there on restart.
+- **Batch RPC calls:** Use `ethers.JsonRpcProvider.send("eth_call", [...])` with multicall for efficient bulk reads.
 
 ---
 
 ## Related Skills
 
-- **`bap578`** — Core contract spec, build/test/deploy workflows
-- **`frontend-web3-bap578`** — Next.js frontend integration with React hooks
-- **`bap578-business`** — Monetization, treasury, pricing, agent economics
+- `bap578`
+- `bap578-analytics`
+- `frontend-web3-bap578`

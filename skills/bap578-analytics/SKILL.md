@@ -2,11 +2,9 @@
 id: bap578-analytics
 name: BAP-578 Analytics & Indexing
 description: >
-  Build analytics dashboards, on-chain indexers, and data pipelines for
-  BAP-578 Non-Fungible Agents. Track minting activity, agent economics,
-  TVL, user growth, engagement metrics, and event history using The Graph,
-  custom indexers, or direct RPC queries. Use when analyzing NFA data or
-  building monitoring tools.
+  Build analytics dashboards and indexers for BAP-578 agents. Track minting
+  activity, agent funding, treasury revenue, and engagement using on-chain
+  events. Use when analyzing NFA data or building monitoring tools.
 category: BAP-578
 author: community
 version: 1.0.0
@@ -14,288 +12,618 @@ examples:
   - "How many BAP-578 agents have been minted?"
   - "Build an analytics dashboard for NFA"
   - "Track treasury revenue from agent mints"
-  - "Index BAP-578 events with The Graph"
+  - "Index BAP-578 events"
   - "What is the TVL in NFA agents?"
   - "Show minting activity over time"
 ---
 
 # BAP-578 Analytics & Indexing
 
-Use this skill when building analytics dashboards, indexers, or data pipelines for BAP-578 Non-Fungible Agents. This covers metrics definition, event indexing, query patterns, and dashboard building for monitoring NFA ecosystem health.
+Use this skill to define metrics, build indexers, create dashboards, and generate reports for BAP-578 Non-Fungible Agents. This covers metric definitions with data sources, event indexing pipelines, aggregation patterns, dashboard design, alerting strategies, and reporting templates.
 
 ---
 
-## The Four Identity Questions — Analytics Perspective
+## When to use this skill
 
-### 1 · Who are you?
+- Defining KPIs and metrics for a BAP-578 deployment.
+- Building an event indexer that processes on-chain events into a queryable database.
+- Creating a real-time analytics dashboard.
+- Generating periodic reports (daily, weekly, monthly).
+- Setting up alerts for anomalous activity.
+- Computing aggregate metrics like TVL, active agent ratio, or mint velocity.
+- Comparing BAP-578 metrics across different time periods.
 
-I am the **data layer** for BAP-578. I answer: **"What's happening across the NFA ecosystem, and what does it mean?"**
+---
 
-I transform raw on-chain events and state into structured metrics: adoption, revenue, engagement, TVL, and user behavior. I power dashboards, alerts, and business intelligence.
+## The Four Identity Questions (Analytics View)
 
-**In short:** "I turn blockchain data into business insights. I watch everything so you can make informed decisions."
+### 1) Who are you?
 
-### 2 · What do you remember?
+The analytics layer turns raw on-chain events and state reads into actionable insights. It answers questions about adoption, engagement, revenue, and ecosystem health. Analytics don't modify the contract — they observe and interpret.
 
-I index and aggregate **every on-chain event** the BAP-578 contract emits:
+### 2) What do you remember?
 
-| Event | Data points | Analytics use |
-|-------|-------------|--------------|
-| `AgentCreated` | tokenId, owner, logicAddress, metadataURI | Mint volume, user acquisition, time series |
-| `AgentFunded` | tokenId, amount | Fund inflows, TVL growth, agent popularity |
-| `AgentWithdraw` | tokenId, amount | Fund outflows, net TVL change |
-| `AgentStatusChanged` | tokenId, active | Active agent count, churn rate |
-| `MetadataUpdated` | tokenId | Engagement frequency, personalization rate |
-| `LogicAddressUpdated` | tokenId, newLogicAddress | Logic contract adoption |
-| `TreasuryUpdated` | newTreasury | Admin activity |
-| `ContractPaused` | paused | Operational incidents |
-| `FreeMintGranted` | user, amount | Campaign tracking, influencer ROI |
-| `Transfer` (ERC-721) | from, to, tokenId | Secondary market activity |
+All on-chain events are immutable and permanently available. The analytics layer indexes and stores:
 
-### 3 · What can you do?
+- Every `AgentCreated` event (minting activity)
+- Every `AgentFunded` event (funding flows)
+- Every `AgentWithdraw` event (withdrawal patterns)
+- Every `AgentStatusChanged` event (lifecycle data)
+- Every `MetadataUpdated` event (engagement signals)
+- Every `Transfer` event (ownership changes)
+- Point-in-time state snapshots (balances, active status)
 
-#### Key Metrics
+### 3) What can you do?
 
-| Metric | Formula | Query |
-|--------|---------|-------|
-| Total agents | `getTotalSupply()` | Direct contract call |
-| Active agents | Count where `active == true` | Iterate or index `AgentStatusChanged` |
-| Unique owners | Distinct `owner` from `tokensOfOwner` | Index `Transfer` events |
-| Revenue (BNB) | Count paid mints × 0.01 | Count `AgentCreated` after free mints exhausted |
-| TVL | Sum of all `agentState.balance` | Aggregate `AgentFunded` - `AgentWithdraw` |
-| Free-to-paid conversion | Users with >3 agents / total users | Track per-user mint count |
-| Engagement rate | `MetadataUpdated` events / total agents | Event count ratio |
-| Agent lifespan | Time between creation and last activity | `createdAt` vs latest event |
+- Compute real-time and historical metrics
+- Build dashboards with charts and tables
+- Generate automated reports
+- Set up alerts for thresholds or anomalies
+- Reconstruct any agent's complete history
+- Compare metrics across time periods
+- Export data for external analysis
 
-#### The Graph Subgraph
+### 4) How can I trust it?
 
-**`subgraph.yaml`:**
+Every metric maps directly to immutable on-chain data. Events cannot be modified after emission. State reads return the current authoritative values. The analytics pipeline can be independently verified by anyone with RPC access.
 
-```yaml
-specVersion: 0.0.5
-schema:
-  file: ./schema.graphql
-dataSources:
-  - kind: ethereum
-    name: BAP578
-    network: bsc
-    source:
-      address: "0xYourProxyAddress"
-      abi: BAP578
-      startBlock: 38000000
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.7
-      language: wasm/assemblyscript
-      entities:
-        - Agent
-        - User
-        - FundEvent
-        - DailyStats
-      abis:
-        - name: BAP578
-          file: ./abis/BAP578.json
-      eventHandlers:
-        - event: AgentCreated(indexed uint256,indexed address,address,string)
-          handler: handleAgentCreated
-        - event: AgentFunded(indexed uint256,uint256)
-          handler: handleAgentFunded
-        - event: AgentWithdraw(indexed uint256,uint256)
-          handler: handleAgentWithdraw
-        - event: AgentStatusChanged(indexed uint256,bool)
-          handler: handleAgentStatusChanged
-        - event: MetadataUpdated(indexed uint256)
-          handler: handleMetadataUpdated
-        - event: Transfer(indexed address,indexed address,indexed uint256)
-          handler: handleTransfer
+---
+
+## Metric Definitions
+
+### Primary Metrics
+
+**Total Agents Minted**
+- Source: `getTotalSupply()` or count of `AgentCreated` events
+- Type: Cumulative counter
+- Update: Real-time
+
+**Unique Owners**
+- Source: Distinct `owner` values from `AgentCreated` events or `tokensOfOwner`
+- Type: Cumulative counter
+- Update: Real-time
+
+**Active Agent Ratio**
+- Formula: `(Active agents / Total agents) × 100`
+- Source: Scan all agents for `active == true`
+- Type: Percentage
+- Update: Daily
+
+**Agent Funding TVL (Total Value Locked)**
+- Formula: Sum of all agent balances
+- Source: `getAgentState(tokenId).balance` for all tokens
+- Type: BNB amount
+- Update: Real-time or hourly
+
+**Paid Mint Count**
+- Formula: `Total supply - Free mints`
+- Source: Count tokens where `isFreeMint(tokenId) == false`
+- Type: Counter
+- Update: Real-time
+
+**Treasury Revenue**
+- Formula: `Paid mints × Mint fee`
+- Source: BNB transfers to treasury address in `AgentCreated` transactions
+- Type: BNB amount
+- Update: Real-time
+
+**Monthly Active Agents (MAA)**
+- Definition: Agents with at least one on-chain interaction in the last 30 days
+- Source: Union of token IDs from all events in last 30 days
+- Type: Counter
+- Update: Daily
+
+### Secondary Metrics
+
+**Mint Velocity**
+- Formula: `Mints per day/week/month`
+- Source: `AgentCreated` events grouped by time period
+- Type: Rate
+
+**Average Agent Balance**
+- Formula: `TVL / Active agent count`
+- Source: Computed from TVL and active count
+- Type: BNB amount
+
+**Free-to-Paid Conversion Rate**
+- Formula: `(Users with paid mints / Users with only free mints) × 100`
+- Source: Per-user analysis of mint events
+- Type: Percentage
+
+**Metadata Update Frequency**
+- Formula: `MetadataUpdated events per week`
+- Source: Event count
+- Type: Rate (engagement signal)
+
+**Logic Contract Adoption**
+- Formula: `(Agents with non-zero logicAddress / Total agents) × 100`
+- Source: State scan for `logicAddress != address(0)`
+- Type: Percentage
+
+**Churn Rate**
+- Formula: `(Agents deactivated in period / Active agents at period start) × 100`
+- Source: `AgentStatusChanged` events where `active == false`
+- Type: Percentage
+
+**Average Agent Lifetime**
+- Formula: `Average time between creation and last activity`
+- Source: `AgentCreated` timestamp vs last event timestamp
+- Type: Duration
+
+---
+
+## Event Sources
+
+### Contract events used for analytics
+
+```
+AgentCreated(uint256 indexed tokenId, address indexed owner, address logicAddress, string metadataURI)
+AgentFunded(uint256 indexed tokenId, address indexed funder, uint256 amount)
+AgentWithdraw(uint256 indexed tokenId, address indexed owner, uint256 amount)
+AgentStatusChanged(uint256 indexed tokenId, bool active)
+MetadataUpdated(uint256 indexed tokenId, string newURI)
+Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
 ```
 
-**`schema.graphql`:**
+### Derived data from events
+
+From `AgentCreated`:
+- Mint count (total and per-user)
+- New owner count
+- Free vs paid classification (check `msg.value` in transaction)
+
+From `AgentFunded`:
+- Funding volume (per agent, per user, per period)
+- Funding frequency
+- Top funders
+
+From `AgentWithdraw`:
+- Withdrawal volume
+- Net flow (funding minus withdrawals)
+
+From `AgentStatusChanged`:
+- Active/inactive transitions
+- Churn events
+- Reactivation events
+
+From `MetadataUpdated`:
+- Engagement frequency
+- Agent evolution patterns
+
+From `Transfer`:
+- Secondary market activity
+- Ownership concentration (Gini coefficient)
+
+---
+
+## Building an Event Indexer
+
+### Architecture
+
+```
+BNB Chain (RPC)
+      │
+      │ poll events / websocket
+      ▼
+┌──────────────┐
+│  Event Poller │  ← reads AgentCreated, AgentFunded, etc.
+└──────┬───────┘
+       │ parse & normalize
+       ▼
+┌──────────────┐
+│  Processor   │  ← computes derived metrics
+└──────┬───────┘
+       │ store
+       ▼
+┌──────────────┐
+│  Database    │  ← PostgreSQL, SQLite, or in-memory
+└──────┬───────┘
+       │ query
+       ▼
+┌──────────────┐
+│  API / UI    │  ← REST API or dashboard
+└──────────────┘
+```
+
+### Event poller implementation
+
+```js
+const { ethers } = require("ethers");
+
+class BAP578Indexer {
+  constructor(provider, contractAddress, abi) {
+    this.contract = new ethers.Contract(contractAddress, abi, provider);
+    this.lastBlock = 0;
+    this.events = [];
+  }
+
+  async indexFromBlock(fromBlock) {
+    const eventNames = [
+      "AgentCreated",
+      "AgentFunded",
+      "AgentWithdraw",
+      "AgentStatusChanged",
+      "MetadataUpdated",
+    ];
+
+    for (const name of eventNames) {
+      const events = await this.contract.queryFilter(
+        this.contract.filters[name](),
+        fromBlock,
+        "latest"
+      );
+
+      for (const event of events) {
+        const block = await event.getBlock();
+        this.events.push({
+          name,
+          blockNumber: event.blockNumber,
+          transactionHash: event.transactionHash,
+          timestamp: new Date(block.timestamp * 1000),
+          args: this.parseArgs(name, event.args),
+        });
+      }
+    }
+
+    this.events.sort((a, b) => a.blockNumber - b.blockNumber);
+    this.lastBlock = await this.contract.runner.provider.getBlockNumber();
+  }
+
+  parseArgs(name, args) {
+    switch (name) {
+      case "AgentCreated":
+        return {
+          tokenId: args.tokenId.toString(),
+          owner: args.owner,
+          logicAddress: args.logicAddress,
+          metadataURI: args.metadataURI,
+        };
+      case "AgentFunded":
+        return {
+          tokenId: args.tokenId.toString(),
+          funder: args.funder,
+          amount: ethers.formatEther(args.amount),
+        };
+      case "AgentWithdraw":
+        return {
+          tokenId: args.tokenId.toString(),
+          owner: args.owner,
+          amount: ethers.formatEther(args.amount),
+        };
+      case "AgentStatusChanged":
+        return {
+          tokenId: args.tokenId.toString(),
+          active: args.active,
+        };
+      case "MetadataUpdated":
+        return {
+          tokenId: args.tokenId.toString(),
+          newURI: args.newURI,
+        };
+      default:
+        return args;
+    }
+  }
+
+  computeMetrics() {
+    const created = this.events.filter((e) => e.name === "AgentCreated");
+    const funded = this.events.filter((e) => e.name === "AgentFunded");
+    const withdrawn = this.events.filter((e) => e.name === "AgentWithdraw");
+    const statusChanged = this.events.filter((e) => e.name === "AgentStatusChanged");
+    const metaUpdated = this.events.filter((e) => e.name === "MetadataUpdated");
+
+    const uniqueOwners = new Set(created.map((e) => e.args.owner)).size;
+
+    const totalFunded = funded.reduce(
+      (sum, e) => sum + parseFloat(e.args.amount), 0
+    );
+    const totalWithdrawn = withdrawn.reduce(
+      (sum, e) => sum + parseFloat(e.args.amount), 0
+    );
+
+    const deactivations = statusChanged.filter((e) => !e.args.active).length;
+    const reactivations = statusChanged.filter((e) => e.args.active).length;
+
+    return {
+      totalMinted: created.length,
+      uniqueOwners,
+      totalFunded: totalFunded.toFixed(4) + " BNB",
+      totalWithdrawn: totalWithdrawn.toFixed(4) + " BNB",
+      netFunding: (totalFunded - totalWithdrawn).toFixed(4) + " BNB",
+      deactivations,
+      reactivations,
+      metadataUpdates: metaUpdated.length,
+    };
+  }
+
+  mintsByPeriod(periodDays = 7) {
+    const created = this.events.filter((e) => e.name === "AgentCreated");
+    const periods = {};
+
+    for (const event of created) {
+      const periodStart = new Date(event.timestamp);
+      periodStart.setDate(
+        periodStart.getDate() - (periodStart.getDate() % periodDays)
+      );
+      const key = periodStart.toISOString().split("T")[0];
+      periods[key] = (periods[key] || 0) + 1;
+    }
+
+    return periods;
+  }
+}
+```
+
+### Real-time event listener
+
+```js
+function startRealTimeMonitoring(contract) {
+  contract.on("AgentCreated", (tokenId, owner, logicAddress, metadataURI, event) => {
+    console.log(`[MINT] Agent #${tokenId} by ${owner} at block ${event.log.blockNumber}`);
+    // Update metrics, send to dashboard, trigger alerts
+  });
+
+  contract.on("AgentFunded", (tokenId, funder, amount, event) => {
+    console.log(`[FUND] Agent #${tokenId} +${ethers.formatEther(amount)} BNB`);
+  });
+
+  contract.on("AgentWithdraw", (tokenId, owner, amount, event) => {
+    console.log(`[WITHDRAW] Agent #${tokenId} -${ethers.formatEther(amount)} BNB`);
+  });
+
+  contract.on("AgentStatusChanged", (tokenId, active) => {
+    console.log(`[STATUS] Agent #${tokenId} → ${active ? "active" : "inactive"}`);
+  });
+
+  console.log("Real-time monitoring started...");
+}
+```
+
+---
+
+## Dashboard Design
+
+### Recommended layout
+
+```
+┌─────────────────────────────────────────────┐
+│  BAP-578 Analytics Dashboard                │
+├──────────┬──────────┬──────────┬────────────┤
+│ Total    │ Active   │ TVL      │ Treasury   │
+│ Minted   │ Agents   │          │ Balance    │
+│ 1,247    │ 892      │ 45.3 BNB │ 12.1 BNB   │
+├──────────┴──────────┴──────────┴────────────┤
+│  Minting Activity (line chart — last 30d)   │
+│  ▁▂▃▅▇▆▄▃▂▅▇▆▅▄▃▂▁▂▃▅▇▆▅▄▃▂▁            │
+├─────────────────────┬───────────────────────┤
+│  Top Owners (table) │  Funding Flow (chart) │
+│  0xABC: 15 agents   │  In:  +12.5 BNB       │
+│  0xDEF: 12 agents   │  Out: -3.2 BNB        │
+│  0x123: 8 agents    │  Net: +9.3 BNB        │
+├─────────────────────┴───────────────────────┤
+│  Recent Events (live feed)                   │
+│  10:05 — Agent #1247 minted by 0xABC        │
+│  10:03 — Agent #892 funded +0.5 BNB         │
+│  09:58 — Agent #445 status → inactive        │
+└─────────────────────────────────────────────┘
+```
+
+### Dashboard components
+
+1. **Summary cards** — total minted, active agents, TVL, treasury
+2. **Mint chart** — line chart of daily/weekly mints
+3. **Funding flow** — bar chart of inflows vs outflows
+4. **Top owners** — table sorted by agent count
+5. **Recent events** — live feed of contract events
+6. **Conversion funnel** — free mint → paid mint flow
+7. **Agent status** — pie chart of active vs inactive
+8. **Logic adoption** — percentage with bound logic contracts
+
+---
+
+## Alerting
+
+### Recommended alerts
+
+**Critical:**
+- Emergency withdraw executed
+- Contract paused/unpaused
+- Ownership transferred
+- Upgrade executed
+
+**High:**
+- Large withdrawal (> threshold BNB)
+- Rapid minting (> N mints in M minutes)
+- Treasury balance below minimum
+
+**Medium:**
+- New record for daily mints
+- TVL milestone reached
+- Active agent ratio drops below threshold
+
+### Alert implementation
+
+```js
+function checkAlerts(event) {
+  if (event.name === "AgentWithdraw") {
+    const amount = parseFloat(event.args.amount);
+    if (amount > 10) {
+      sendAlert("HIGH", `Large withdrawal: ${amount} BNB from Agent #${event.args.tokenId}`);
+    }
+  }
+
+  if (event.name === "AgentCreated") {
+    const recentMints = getMintsInLastMinutes(5);
+    if (recentMints > 50) {
+      sendAlert("HIGH", `Rapid minting detected: ${recentMints} mints in 5 minutes`);
+    }
+  }
+}
+```
+
+---
+
+## Reporting Templates
+
+### Daily summary
+
+```
+BAP-578 Daily Report — 2026-03-06
+──────────────────────────────────
+New mints:        +14 (total: 1,247)
+New owners:       +6  (total: 423)
+Funding inflows:  +2.3 BNB
+Withdrawals:      -0.5 BNB
+Net funding:      +1.8 BNB
+TVL:              45.3 BNB
+Active agents:    892 (71.5%)
+Metadata updates: 23
+Notable: Agent #1200 funded with 5 BNB (largest single deposit this week)
+```
+
+### Weekly trends
+
+```
+BAP-578 Weekly Trends — W10 2026
+─────────────────────────────────
+Metric              This Week    Last Week    Change
+Mints               98           72           +36.1%
+New owners           34           28           +21.4%
+Funding volume      15.2 BNB     11.8 BNB     +28.8%
+Active ratio        71.5%        69.2%        +2.3pp
+Paid mint conv.     18.2%        15.7%        +2.5pp
+```
+
+---
+
+## Subgraph Integration (The Graph)
+
+For production-grade indexing, use The Graph protocol to create a subgraph:
+
+### Subgraph schema
 
 ```graphql
 type Agent @entity {
   id: ID!
   tokenId: BigInt!
-  owner: User!
-  active: Boolean!
+  owner: Bytes!
   balance: BigDecimal!
+  active: Boolean!
+  logicAddress: Bytes!
   createdAt: BigInt!
-  metadataURI: String
-  logicAddress: Bytes
+  persona: String
+  experience: String
+  vaultURI: String
+  vaultHash: Bytes!
   isFreeMint: Boolean!
-  fundEvents: [FundEvent!]! @derivedFrom(field: "agent")
-  totalFunded: BigDecimal!
-  totalWithdrawn: BigDecimal!
-  metadataUpdateCount: Int!
-  lastActivityAt: BigInt!
+  fundingEvents: [FundingEvent!]! @derivedFrom(field: "agent")
+  withdrawEvents: [WithdrawEvent!]! @derivedFrom(field: "agent")
 }
 
-type User @entity {
-  id: ID!
-  address: Bytes!
-  agents: [Agent!]! @derivedFrom(field: "owner")
-  agentCount: Int!
-  totalFunded: BigDecimal!
-  firstMintAt: BigInt
-}
-
-type FundEvent @entity {
+type FundingEvent @entity {
   id: ID!
   agent: Agent!
+  funder: Bytes!
   amount: BigDecimal!
+  blockNumber: BigInt!
   timestamp: BigInt!
-  type: String! # "fund" or "withdraw"
+  transactionHash: Bytes!
 }
 
-type DailyStats @entity {
+type WithdrawEvent @entity {
+  id: ID!
+  agent: Agent!
+  owner: Bytes!
+  amount: BigDecimal!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type DailyStat @entity {
   id: ID!
   date: String!
   mintCount: Int!
-  fundVolume: BigDecimal!
+  fundingVolume: BigDecimal!
   withdrawVolume: BigDecimal!
   activeAgents: Int!
-  uniqueUsers: Int!
-  tvl: BigDecimal!
+  uniqueOwners: Int!
 }
 ```
 
-**Example GraphQL queries:**
+### Querying the subgraph
 
 ```graphql
-# Top 10 agents by balance
+# Top 10 funded agents
 {
-  agents(first: 10, orderBy: balance, orderDirection: desc) {
+  agents(orderBy: balance, orderDirection: desc, first: 10) {
     tokenId
-    owner { address }
+    owner
     balance
     active
-    createdAt
+    experience
   }
 }
 
-# Daily minting activity
+# Daily minting stats for last 30 days
 {
-  dailyStats(first: 30, orderBy: date, orderDirection: desc) {
+  dailyStats(orderBy: date, orderDirection: desc, first: 30) {
     date
     mintCount
-    fundVolume
-    tvl
-    uniqueUsers
+    fundingVolume
+    activeAgents
   }
 }
 
-# Power users (most agents)
+# Agent history
 {
-  users(first: 20, orderBy: agentCount, orderDirection: desc) {
-    address
-    agentCount
-    totalFunded
+  agent(id: "17") {
+    tokenId
+    owner
+    balance
+    fundingEvents(orderBy: timestamp, orderDirection: desc) {
+      amount
+      funder
+      timestamp
+    }
   }
 }
 ```
 
-#### Simple RPC-Based Analytics Script
+---
 
-For quick analytics without The Graph:
+## API Endpoints for Dashboards
 
-```javascript
-const { ethers } = require("ethers");
-
-const provider = new ethers.providers.JsonRpcProvider("https://bsc-dataseed.binance.org/");
-const contract = new ethers.Contract(PROXY_ADDRESS, BAP578_ABI, provider);
-
-async function getAnalytics() {
-    const totalSupply = await contract.getTotalSupply();
-    console.log("Total Agents:", totalSupply.toString());
-
-    // Count events
-    const fromBlock = DEPLOY_BLOCK;
-    const toBlock = "latest";
-
-    const created = await contract.queryFilter(
-        contract.filters.AgentCreated(), fromBlock, toBlock
-    );
-    const funded = await contract.queryFilter(
-        contract.filters.AgentFunded(), fromBlock, toBlock
-    );
-    const withdrawn = await contract.queryFilter(
-        contract.filters.AgentWithdraw(), fromBlock, toBlock
-    );
-
-    // Revenue calculation
-    let totalFundedBNB = ethers.BigNumber.from(0);
-    for (const e of funded) {
-        totalFundedBNB = totalFundedBNB.add(e.args.amount);
-    }
-
-    let totalWithdrawnBNB = ethers.BigNumber.from(0);
-    for (const e of withdrawn) {
-        totalWithdrawnBNB = totalWithdrawnBNB.add(e.args.amount);
-    }
-
-    console.log("Mint Events:", created.length);
-    console.log("Fund Events:", funded.length);
-    console.log("Total Funded:", ethers.utils.formatEther(totalFundedBNB), "BNB");
-    console.log("Total Withdrawn:", ethers.utils.formatEther(totalWithdrawnBNB), "BNB");
-    console.log("Net TVL:", ethers.utils.formatEther(
-        totalFundedBNB.sub(totalWithdrawnBNB)
-    ), "BNB");
-
-    // Unique owners
-    const owners = new Set(created.map(e => e.args.owner));
-    console.log("Unique Owners:", owners.size);
-}
-```
-
-#### Dashboard Metrics Template
+If building a REST API for the analytics dashboard:
 
 ```
-╔═══════════════════════════════════════╗
-║      NFA Analytics Dashboard          ║
-╠═══════════════════════════════════════╣
-║                                       ║
-║  SUPPLY        1,234 total agents     ║
-║  ACTIVE          987 (80.0%)          ║
-║  OWNERS          456 unique           ║
-║                                       ║
-║  REVENUE                              ║
-║  Paid Mints      284 × 0.01 BNB      ║
-║  Total Rev       2.84 BNB            ║
-║  Treasury        2.10 BNB            ║
-║                                       ║
-║  TVL                                  ║
-║  Total Funded    150.5 BNB            ║
-║  Total Withdrawn  45.2 BNB           ║
-║  Net TVL         105.3 BNB            ║
-║                                       ║
-║  ENGAGEMENT (30d)                     ║
-║  Metadata Updates  340                ║
-║  Fund Events       210                ║
-║  Status Changes     89                ║
-║                                       ║
-║  CONVERSION                           ║
-║  Free→Paid Rate   18.4%              ║
-║  Avg Agents/User  2.7                ║
-║                                       ║
-╚═══════════════════════════════════════╝
+GET /api/metrics/summary          → total minted, active, TVL, treasury
+GET /api/metrics/mints?period=7d  → mint count by day for last 7 days
+GET /api/metrics/funding?period=30d → funding volume by day
+GET /api/agents/:tokenId          → single agent full profile
+GET /api/agents/:tokenId/history  → event history for agent
+GET /api/owners/:address          → portfolio for owner
+GET /api/leaderboard/funded       → top agents by balance
+GET /api/leaderboard/owners       → top owners by agent count
+GET /api/alerts/recent            → recent triggered alerts
 ```
 
-### 4 · How can I trust it?
+---
 
-Analytics trust comes from **data provenance**:
+## Output Format
 
-- **All data originates from the chain** — events and state are read directly from the BAP-578 proxy via RPC or subgraph indexer.
-- **Events are immutable** — once emitted, event data cannot be altered.
-- **Aggregations are reproducible** — anyone can rerun the same queries and get the same results.
-- **The Graph is decentralized** — subgraph data is indexed by multiple nodes and verifiable.
-- **Metrics formulas are transparent** — every metric definition is documented above.
+When asked for analytics help, respond with:
 
-**In short:** "Trust the analytics because every number traces back to an immutable on-chain event or state read. Reproduce any metric yourself with the same queries."
+1. **Metric definitions** (what to measure and how)
+2. **Event sources** (which events feed each metric)
+3. **Implementation code** (indexer, aggregation, API)
+4. **Dashboard layout** (what to display and where)
+5. **Alert configuration** (thresholds and channels)
 
 ---
 
 ## Related Skills
 
-- **`bap578-scanner`** — Single-agent lookup and verification
-- **`bap578-business`** — Business metrics interpretation and strategy
-- **`frontend-web3-bap578`** — Displaying analytics in React dashboards
+- `bap578`
+- `bap578-scanner`
+- `bap578-business`

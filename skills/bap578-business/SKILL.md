@@ -3,10 +3,8 @@ id: bap578-business
 name: BAP-578 Business & Monetization
 description: >
   Business strategy, monetization models, treasury management, pricing,
-  agent economics, and go-to-market planning for BAP-578 Non-Fungible Agents
-  on BNB Chain. Covers free-mint funnels, fee structures, agent marketplaces,
-  revenue streams, and operational economics. Use when planning the commercial
-  side of an NFA deployment.
+  and go-to-market planning for BAP-578 Non-Fungible Agents on BNB Chain.
+  Use when planning the commercial side of an NFA deployment.
 category: BAP-578
 author: community
 version: 1.0.0
@@ -22,325 +20,425 @@ examples:
 
 # BAP-578 Business & Monetization
 
-Use this skill when planning, launching, or optimizing the commercial side of a BAP-578 Non-Fungible Agents deployment. This covers revenue models, treasury management, pricing strategies, free-mint funnels, marketplace design, and agent economics.
+Use this skill when planning monetization, pricing, treasury flows, growth strategy, and unit economics for BAP-578 Non-Fungible Agents. This skill bridges contract mechanics to business outcomes and provides actionable frameworks for launching, growing, and sustaining an NFA ecosystem.
 
 ---
 
-## The Four Identity Questions — Business Perspective
+## When to use this skill
 
-### 1 · Who are you?
-
-I am the **business layer** of BAP-578. While the core skill explains the smart contract and the frontend skill builds the UI, I answer the question every founder and operator asks: **"How does this make money, and how do I grow it?"**
-
-I translate BAP-578's technical primitives into business outcomes:
-
-| Technical primitive | Business meaning |
-|--------------------|-----------------|
-| `MINT_FEE` (0.01 BNB) | Primary revenue per agent after free tier |
-| `freeMintsPerUser` (3) | Customer acquisition funnel — zero-cost onboarding |
-| `treasuryAddress` | Revenue collection point — where fees flow |
-| `fundAgent()` / `withdrawFromAgent()` | Agent-level treasury — each agent is a mini wallet |
-| `AgentMetadata` (persona, experience, vault) | Product differentiation — every agent is unique |
-| `logicAddress` | Premium feature — agents with bound behavior contracts |
-| `isFreeMint` (non-transferable) | Anti-farming — free agents can't be resold |
-| UUPS upgradeable | Product iteration — ship new features without redeployment |
-
-**In short:** "I am the bridge between code and commerce. I make BAP-578 a business, not just a contract."
-
-### 2 · What do you remember?
-
-I track the **financial and operational metrics** that matter for the business:
-
-| Metric | How to measure | Why it matters |
-|--------|---------------|---------------|
-| Total agents minted | `getTotalSupply()` | Overall adoption |
-| Free mints consumed | Sum of `freeMintsClaimed` across all users | Funnel conversion (free → paid) |
-| Paid mints | Total supply minus free mints | Direct revenue count |
-| Treasury balance | Check `treasuryAddress` balance on BscScan | Accumulated revenue |
-| Revenue generated | Paid mints × 0.01 BNB | Total income |
-| Active vs inactive agents | Aggregate `AgentState.active` across all tokens | Product engagement |
-| Agent balances (TVL) | Sum of all `AgentState.balance` values | Total value locked in agents |
-| Unique owners | Count distinct addresses via `tokensOfOwner` | User base size |
-| Agents per owner | `balanceOf(address)` distribution | Power user analysis |
-| Metadata update frequency | Count `MetadataUpdated` events | User engagement with personalization |
-| Fund/withdraw velocity | Count and sum `AgentFunded` / `AgentWithdraw` events | Economic activity |
-
-**I remember the business story the chain tells.** Every mint, fund, and withdrawal is a data point.
-
-### 3 · What can you do?
-
-#### Revenue Model
-
-BAP-578 has a **freemium model** built into the contract:
-
-```
-┌─────────────────────────────────────────────────┐
-│              BAP-578 Revenue Funnel              │
-├─────────────────────────────────────────────────┤
-│                                                 │
-│  User discovers NFA                             │
-│       │                                         │
-│       ▼                                         │
-│  3 FREE MINTS ──── Acquisition (cost: gas only) │
-│       │                                         │
-│       ▼                                         │
-│  PAID MINTS ────── Revenue (0.01 BNB each)      │
-│       │               │                         │
-│       │               ▼                         │
-│       │          Treasury collects fee           │
-│       ▼                                         │
-│  FUND AGENTS ───── TVL growth (agent wallets)   │
-│       │                                         │
-│       ▼                                         │
-│  PREMIUM FEATURES ─ Logic contracts, vaults     │
-│                                                 │
-└─────────────────────────────────────────────────┘
-```
-
-#### Revenue Streams
-
-| Stream | Source | Amount | When |
-|--------|--------|--------|------|
-| **Mint fees** | `createAgent()` after free tier | 0.01 BNB per mint | Every paid mint |
-| **Agent fund deposits** | `fundAgent()` | Variable (user sets) | Ongoing |
-| **Premium logic contracts** | Custom `logicAddress` services | Custom pricing (off-chain) | On demand |
-| **Metadata services** | Hosted vault, voice, animation | Subscription or one-time (off-chain) | On demand |
-| **Marketplace fees** | Secondary sales of paid agents | % commission (off-chain) | On transfer |
-
-#### Pricing Strategy
-
-The current contract hardcodes `MINT_FEE = 0.01 BNB`. Here are pricing considerations:
-
-| BNB Price | Mint fee in USD | Assessment |
-|-----------|----------------|------------|
-| $200 | $2.00 | Very accessible — good for mass adoption |
-| $400 | $4.00 | Moderate — balanced for quality users |
-| $600 | $6.00 | Slight barrier — filters casual minters |
-| $1000 | $10.00 | Premium feel — may deter casual users |
-
-**Recommendation:** At current levels, 0.01 BNB is well-positioned for mass adoption. For premium tiers, consider:
-- Tiered pricing via a wrapper contract (basic agent: 0.01 BNB, enhanced agent: 0.05 BNB).
-- Dynamic pricing based on supply milestones (first 1000 agents at base rate, then step up).
-- Bundle pricing for power users (10 agents at a discount).
-
-#### Free-Mint Strategy
-
-The 3 free mints per user serve as a **customer acquisition funnel**:
-
-| Strategy | Implementation | Business goal |
-|----------|---------------|--------------|
-| **Default (3 free)** | Contract default | Broad onboarding |
-| **Grant bonus mints** | `grantAdditionalFreeMints(user, N)` | Reward VIPs, partners, creators |
-| **Reduce free tier** | `setFreeMintsPerUser(1)` | Increase paid conversion rate |
-| **Increase free tier** | `setFreeMintsPerUser(5)` | Aggressive growth phase |
-| **Influencer campaigns** | Grant 10+ bonus mints to influencers | Viral distribution |
-| **Enterprise onboarding** | Grant 100+ to business accounts | B2B acquisition |
-
-**Key constraint:** Free-minted agents are **non-transferable** (soulbound). This prevents farming — users can't mint 3 free agents and sell them. They must use them or burn them.
-
-#### Treasury Management
-
-```
-Mint Fees ──────► Treasury Address ──────► Distribution
-                                              │
-                                    ┌─────────┼─────────┐
-                                    │         │         │
-                                 Team      Reserve   Operations
-                                 (40%)     (40%)     (20%)
-```
-
-| Admin action | Function | When to use |
-|-------------|----------|------------|
-| Check balance | View `treasuryAddress` on BscScan | Regular monitoring |
-| Change treasury | `setTreasury(newAddress)` | Rotate to multisig, split treasury |
-| Emergency withdraw | `emergencyWithdraw()` | Only in crisis — drains contract balance to owner |
-
-**Best practices:**
-- Use a **multisig wallet** (e.g., Gnosis Safe) as treasury for production.
-- Set up **regular distributions** from treasury to team, reserve, and operations.
-- Track all treasury flows publicly for community trust.
-- Never use `emergencyWithdraw()` unless contract is compromised.
-
-#### Cost Structure
-
-| Cost | Amount | Frequency |
-|------|--------|-----------|
-| Contract deployment | ~0.025 BNB (~$15) | One-time |
-| Contract verification | ~0.0005 BNB | One-time |
-| Gas per free mint | ~0.0015 BNB (paid by user) | Per mint |
-| Off-chain storage (IPFS pinning) | $5–50/month | Monthly |
-| RPC provider (if self-hosted) | $0–100/month | Monthly |
-| Frontend hosting | $0–20/month | Monthly |
-| Domain + SSL | $10–50/year | Annual |
-
-**Break-even calculation:**
-- Fixed monthly cost: ~$75 (IPFS + hosting + domain)
-- Revenue per paid mint at $400 BNB: $4.00
-- Break-even: 19 paid mints/month (after free tier exhausted)
-
-#### Go-to-Market Playbook
-
-**Phase 1 — Testnet Launch (Week 1–2)**
-1. Deploy to BSC Testnet.
-2. Invite 20–50 testers via bonus free mints.
-3. Collect feedback on UX and metadata quality.
-4. Fix bugs, optimize gas.
-
-**Phase 2 — Mainnet Soft Launch (Week 3–4)**
-1. Deploy to BSC Mainnet.
-2. Verify on BscScan for transparency.
-3. Announce to early community (Discord, Twitter).
-4. Monitor first 100 mints for issues.
-
-**Phase 3 — Growth (Month 2–3)**
-1. Grant bonus mints to influencers and partners.
-2. Launch frontend with wallet connect.
-3. Introduce premium features (custom vaults, logic contracts).
-4. Track conversion: free mints → paid mints → funded agents.
-
-**Phase 4 — Marketplace & Ecosystem (Month 4+)**
-1. Enable secondary trading (paid agents only).
-2. Build or integrate with NFT marketplaces.
-3. Introduce agent-to-agent interactions via logic contracts.
-4. Explore cross-chain expansion.
-
-#### Marketplace Design
-
-Since free-minted agents are non-transferable, the marketplace only applies to **paid agents**:
-
-| Feature | Implementation |
-|---------|---------------|
-| Listing | Owner approves marketplace contract, sets ask price |
-| Transfer | Standard ERC-721 `transferFrom` (blocked for free mints) |
-| Royalties | Implement EIP-2981 in a contract upgrade for creator royalties |
-| Discovery | Index agents by persona, experience, balance, activity |
-| Verification | Use scanner skill to show trust badges on listings |
-
-#### Agent-Level Economics
-
-Each agent has its own BNB balance, creating a **micro-economy**:
-
-| Concept | Mechanism | Business use |
-|---------|-----------|-------------|
-| Agent funding | `fundAgent(tokenId)` | Anyone can tip/fund agents |
-| Agent withdrawal | `withdrawFromAgent(tokenId, amount)` — owner only | Owner monetizes agent services |
-| Agent TVL | Sum of all agent balances | Network health metric |
-| Agent as wallet | Balance held in contract per token ID | Pay-for-service model (agent earns, owner withdraws) |
-
-**Business model example:** An AI agent with persona "financial advisor" earns BNB from users who fund it for advice. Owner periodically withdraws earnings.
-
-### 4 · How can I trust it?
-
-Business trust in BAP-578 is built on **on-chain transparency**:
-
-- **Revenue is verifiable** — Every mint fee payment flows to the treasury address and is visible on BscScan. No hidden charges.
-- **Free tier is enforced by code** — `freeMintsPerUser` is a public state variable. No bait-and-switch.
-- **Anti-farming is built in** — Free-minted agents are non-transferable. The code enforces this in `_beforeTokenTransfer`.
-- **Treasury is auditable** — The treasury address and all inflows are public. Anyone can track where the money goes.
-- **Pricing is transparent** — `MINT_FEE` is a public constant (0.01 BNB). No dynamic pricing hidden in the code.
-- **Admin powers are bounded** — The owner can pause, change treasury, and grant mints — but cannot take user agents, drain agent balances (except via `emergencyWithdraw` of contract balance), or change the mint fee without an upgrade.
-- **Upgrade path is visible** — UUPS upgrades require owner authorization. The community can monitor for upgrade transactions.
-
-**In short:** "Trust the business because the economics are enforced on-chain. Revenue, pricing, free tiers, and anti-farming are all verifiable in the contract code."
+- Designing pricing and fee structures for agent minting.
+- Planning the freemium-to-paid conversion funnel.
+- Modeling treasury inflows, outflows, and sustainability.
+- Building a go-to-market strategy for an NFA launch.
+- Evaluating partnership and marketplace opportunities.
+- Forecasting unit economics and break-even scenarios.
+- Reporting on key business metrics to stakeholders.
 
 ---
 
-## Key Business Metrics Dashboard
+## The Four Identity Questions (Business View)
 
-Track these on-chain metrics for business health:
+### 1) Who are you?
+
+The business layer translates on-chain contract mechanics into revenue, growth, and sustainability. It answers: how does this project make money, how does it grow, and how does it stay solvent? The business identity is the commercial wrapper around the technical standard — it defines pricing, positioning, target audiences, and value capture mechanisms.
+
+### 2) What do you remember?
+
+Business memory is derived from on-chain metrics and off-chain analytics:
+
+**On-chain metrics (authoritative):**
+- Total agents minted (from `getTotalSupply()`)
+- Free mints consumed per user (from `getFreeMints()`)
+- Paid mint count (total supply minus free mints)
+- Treasury balance (contract balance or treasury address balance)
+- Agent funding TVL (sum of all agent balances)
+- Active agent ratio (active count / total supply)
+
+**Off-chain metrics (supplementary):**
+- User acquisition cost (CAC)
+- Free-to-paid conversion rate
+- Retention (agents still active after 30/60/90 days)
+- Average revenue per user (ARPU)
+- Community growth rate (Discord, Twitter, GitHub)
+
+### 3) What can you do?
+
+Build and execute complete business strategies:
+
+- Design pricing models aligned with contract fee mechanics
+- Model freemium funnels with conversion projections
+- Create treasury management policies
+- Plan multi-phase go-to-market launches
+- Structure partnership and integration deals
+- Build marketplace economics for secondary agent trading
+- Project unit economics and break-even timelines
+- Design growth loops that leverage the free mint mechanic
+
+### 4) How can I trust it?
+
+All revenue and core business metrics are enforceable or verifiable via on-chain state and events:
+
+- Mint fees flow to the treasury address — verifiable on block explorer
+- Free mint allocations are tracked per user on-chain
+- Agent funding TVL is computed from on-chain balances
+- Treasury withdrawals are tracked via events
+- No hidden revenue flows — everything is transparent
+
+---
+
+## Revenue Architecture
+
+### Primary revenue streams
+
+**1. Mint fees (core revenue)**
+
+After each user exhausts their free mint allocation, every subsequent mint requires a fixed fee. This fee is sent to the treasury address as part of the `createAgent` transaction.
+
+Revenue formula:
+```
+Mint revenue = (Total mints - Free mints) × Mint fee
+```
+
+Example: If 10,000 agents are minted, 3,000 are free, and the fee is 0.01 BNB:
+```
+Revenue = 7,000 × 0.01 = 70 BNB
+```
+
+**2. Agent funding fees (optional)**
+
+Agents can hold BNB. A wrapper contract or protocol fee could take a percentage of funding deposits. This is not built into the base contract but can be added via a logic contract or wrapper.
+
+**3. Premium services (off-chain)**
+
+- Hosted vault storage (IPFS pinning, encrypted vaults)
+- Premium persona templates and voice profiles
+- Custom logic contract development
+- Analytics dashboards and reporting
+- Priority support and onboarding
+
+**4. Marketplace fees (secondary market)**
+
+If agents are traded on a marketplace (built by you or third-party), a royalty or listing fee captures value from secondary sales. ERC-721 royalty standards (ERC-2981) can be implemented in an upgrade.
+
+**5. Partnership and integration fees**
+
+- B2B licensing of the NFA framework to enterprises
+- White-label deployments for other chains or verticals
+- API access fees for third-party integrations
+
+---
+
+## Pricing Strategy
+
+### Freemium model (recommended)
+
+The contract's built-in free mint allocation creates a natural freemium funnel:
+
+**Phase 1: Free tier**
+- Default free mints per user (e.g., 3)
+- Purpose: reduce friction, drive adoption, let users experience the product
+- Free-minted tokens are non-transferable (soulbound-like)
+- Users learn the value before paying
+
+**Phase 2: Paid tier**
+- After free mints, a fixed fee per mint
+- Paid tokens are transferable
+- Higher perceived value due to transferability
+
+**Phase 3: Premium tier (optional)**
+- Discounted bulk minting for enterprises
+- Custom metadata templates
+- Dedicated logic contract hosting
+- SLA-backed vault storage
+
+### Setting the mint fee
+
+Consider these factors:
+
+- **Gas costs on BNB Chain:** typically 0.001-0.005 BNB per transaction
+- **Competitive landscape:** what do similar NFT projects charge?
+- **Target audience:** developers (price-sensitive) vs. enterprises (value-driven)
+- **Revenue goals:** work backward from target monthly revenue
+
+Recommended starting ranges:
+- Consumer/developer: 0.005–0.02 BNB per mint
+- Enterprise: 0.05–0.5 BNB per mint
+- Promotional: temporarily reduced or zero fees for campaigns
+
+### Dynamic pricing (advanced)
+
+Implement pricing tiers based on supply:
+```
+if (totalSupply < 1000) fee = 0.005 BNB    // early adopter
+if (totalSupply < 5000) fee = 0.01 BNB     // growth phase
+if (totalSupply >= 5000) fee = 0.02 BNB    // mature phase
+```
+
+This requires a contract upgrade to modify fee logic.
+
+---
+
+## Freemium Conversion Funnel
+
+### Funnel stages
 
 ```
-╔═══════════════════════════════════════════════╗
-║         BAP-578 Business Dashboard            ║
-╠═══════════════════════════════════════════════╣
-║                                               ║
-║  📊 ADOPTION                                  ║
-║  Total Agents:        getTotalSupply()         ║
-║  Unique Owners:       (index tokensOfOwner)    ║
-║  Agents/Owner Avg:    supply / owners          ║
-║                                               ║
-║  💰 REVENUE                                   ║
-║  Paid Mints:          supply - free mints      ║
-║  Revenue (BNB):       paid × 0.01              ║
-║  Treasury Balance:    (check BscScan)          ║
-║                                               ║
-║  🏦 TVL (Agent Balances)                      ║
-║  Total Locked:        Σ agentState.balance     ║
-║  Avg per Agent:       total / active agents    ║
-║                                               ║
-║  📈 ENGAGEMENT                                ║
-║  Active Agents:       count(active == true)    ║
-║  Metadata Updates:    count(MetadataUpdated)   ║
-║  Fund Events:         count(AgentFunded)       ║
-║  Withdraw Events:     count(AgentWithdraw)     ║
-║                                               ║
-║  🔄 CONVERSION                                ║
-║  Free→Paid Rate:      paid owners / total      ║
-║  Free Mints Left:     Σ getFreeMints(users)    ║
-║                                               ║
-╚═══════════════════════════════════════════════╝
+Awareness → Visit → Connect Wallet → Free Mint → Use Agent → Paid Mint → Retention
+```
+
+### Conversion levers
+
+**Awareness → Visit:**
+- Content marketing (blog posts, Twitter threads, YouTube)
+- Developer documentation and tutorials
+- Partnership announcements
+- Community events
+
+**Visit → Connect Wallet:**
+- Clear value proposition on landing page
+- Low-friction wallet connection (RainbowKit)
+- Social proof (agent count, community size)
+
+**Connect Wallet → Free Mint:**
+- One-click mint with pre-filled defaults
+- Clear explanation of what they get
+- No payment required (removes biggest friction)
+
+**Free Mint → Use Agent:**
+- Guided onboarding after mint
+- Dashboard showing agent identity
+- Prompt to customize persona and experience
+- Integration with chat or automation tools
+
+**Use Agent → Paid Mint:**
+- Show value of additional agents (different personas)
+- Highlight transferability of paid agents
+- Time-limited promotions (bonus free mints via admin)
+- Social features (agent collections, leaderboards)
+
+**Paid Mint → Retention:**
+- Regular metadata updates and new features
+- Community events and competitions
+- Logic contract marketplace
+- Agent-to-agent interaction features
+
+### Target conversion rates
+
+- Visit → Connect wallet: 15-25%
+- Connect wallet → Free mint: 40-60%
+- Free mint → Active use: 30-50%
+- Active use → Paid mint: 10-20%
+- Paid mint → Second paid mint: 15-30%
+
+---
+
+## Treasury Management
+
+### Treasury address setup
+
+Use a multisig wallet (e.g., Safe/Gnosis Safe) as the treasury address. Configure:
+
+- 2-of-3 or 3-of-5 signer threshold
+- Named signers with known identities
+- Transaction execution requires quorum
+
+### Inflow tracking
+
+Treasury inflows come from:
+- Paid mint fees (automatic, on every paid mint)
+- Emergency withdraw (admin function, should be rare)
+
+Track by monitoring `Transfer` events to the treasury address and the `AgentCreated` events that indicate paid mints.
+
+### Outflow categories
+
+- **Operations:** hosting, RPC infrastructure, domain names
+- **Development:** smart contract audits, frontend development
+- **Marketing:** campaigns, partnerships, bounties
+- **Reserves:** minimum 3-month operating runway
+
+### Treasury reporting
+
+Publish periodic reports (monthly or quarterly):
+
+```
+Treasury Report — Q1 2026
+─────────────────────────
+Opening balance:     50.00 BNB
+Mint revenue:       +35.00 BNB
+Funding fees:        +2.50 BNB
+Total inflows:      +37.50 BNB
+
+Operations:         -10.00 BNB
+Development:        -15.00 BNB
+Marketing:           -5.00 BNB
+Total outflows:     -30.00 BNB
+
+Closing balance:     57.50 BNB
+Runway:              5.75 months (at current burn rate)
+```
+
+### Treasury policies
+
+- Maintain minimum 3-month runway at all times.
+- No single-signer withdrawals.
+- Emergency withdrawals require documented justification.
+- Publish reports within 15 days of period end.
+- Allocate 10-20% of revenue to a reserve fund.
+
+---
+
+## Go-to-Market Playbook
+
+### Phase 1: Pre-launch (2-4 weeks)
+
+**Goals:** Build awareness, establish community, prepare infrastructure.
+
+- Deploy to testnet and run public testing
+- Create documentation and tutorials
+- Set up community channels (Discord, Twitter)
+- Recruit beta testers and early advocates
+- Prepare landing page with mint flow
+- Complete security audit (see `bap578-security-audit`)
+
+### Phase 2: Soft launch (1-2 weeks)
+
+**Goals:** Validate with real users, identify issues, tune pricing.
+
+- Deploy to mainnet with limited promotion
+- Monitor first 100-500 mints closely
+- Collect feedback on UX, pricing, and persona design
+- Fix issues rapidly
+- Begin community engagement
+
+### Phase 3: Growth (ongoing)
+
+**Goals:** Scale adoption, build partnerships, expand features.
+
+- Launch marketing campaigns
+- Partner with AI projects and platforms
+- Grant bonus free mints for partner communities
+- Build and ship logic contract marketplace
+- Add analytics dashboard (see `bap578-analytics`)
+- Launch secondary marketplace for agent trading
+
+### Phase 4: Maturity (6+ months)
+
+**Goals:** Sustainable revenue, ecosystem expansion, governance.
+
+- Introduce premium service tiers
+- Implement on-chain governance for treasury decisions
+- Expand to additional chains (if demand warrants)
+- Develop enterprise solutions and B2B offerings
+- Consider token economics (if appropriate for the ecosystem)
+
+---
+
+## Key Metrics Dashboard
+
+### North star metric
+
+**Monthly Active Agents (MAA):** agents with at least one on-chain interaction (funding, withdrawal, metadata update, or status change) in the last 30 days.
+
+### Primary metrics
+
+| Metric | Source | Frequency |
+|--------|--------|-----------|
+| Total agents minted | `getTotalSupply()` | Real-time |
+| Paid mint count | Total - free mints | Real-time |
+| Treasury balance | Treasury address balance | Real-time |
+| Free-to-paid conversion | (Paid users / Free users) × 100 | Weekly |
+| Agent funding TVL | Sum of agent balances | Real-time |
+| Active agent ratio | Active / Total | Daily |
+| Monthly Active Agents | Event-based | Monthly |
+| Unique owners | Distinct owner addresses | Real-time |
+
+### Secondary metrics
+
+| Metric | Source | Frequency |
+|--------|--------|-----------|
+| Mint velocity | Mints per day/week | Daily |
+| Average agent balance | TVL / Active agents | Daily |
+| Metadata update frequency | MetadataUpdated events | Weekly |
+| Logic contract adoption | Agents with non-zero logic | Weekly |
+| Churn rate | Agents deactivated / Total | Monthly |
+
+---
+
+## Unit Economics
+
+### Cost structure
+
+**Fixed costs (monthly):**
+- RPC infrastructure: varies by provider
+- Domain and hosting: minimal
+- Team compensation: project-dependent
+
+**Variable costs (per mint):**
+- Gas subsidy (if sponsoring user gas): ~0.001-0.003 BNB
+- Metadata storage (IPFS pinning): minimal per agent
+- Support overhead: scales with user count
+
+### Break-even analysis
+
+```
+Break-even mints = Fixed monthly costs / (Mint fee - Variable cost per mint)
+```
+
+Example:
+```
+Fixed costs:    5 BNB/month
+Mint fee:       0.01 BNB
+Variable cost:  0.001 BNB
+
+Break-even = 5 / (0.01 - 0.001) = 556 paid mints per month
 ```
 
 ---
 
-## Admin Operations Playbook
+## Marketplace Strategy
 
-| Situation | Action | Command |
-|-----------|--------|---------|
-| Launch campaign — give influencer 10 mints | Grant bonus | `grantAdditionalFreeMints(influencer, 10)` |
-| Reduce free tier after growth phase | Lower default | `setFreeMintsPerUser(1)` |
-| Move treasury to multisig | Update treasury | `setTreasury(multisigAddress)` |
-| Emergency — contract compromised | Pause + withdraw | `setPaused(true)` then `emergencyWithdraw()` |
-| New feature ready | Upgrade | Deploy new implementation, call `upgradeTo(newImpl)` |
-| Partner wants custom agents | Enterprise onboarding | `grantAdditionalFreeMints(partner, 100)` |
+### Building an agent marketplace
 
----
+A marketplace where users can discover, trade, and evaluate agents adds a network effects layer to the ecosystem.
 
-## Financial Projections Template
+**Core features:**
+- Agent discovery (search by persona, experience, active status)
+- Agent profiles (four identity questions rendered as cards)
+- Trading (list, buy, make offers for paid agents)
+- Reviews and ratings (off-chain, linked to agent token ID)
+- Collections (group agents by creator or theme)
 
-```
-Month 1 (Soft Launch):
-  Free mints:       150 users × 3 = 450 free agents
-  Paid mints:       50 agents × 0.01 BNB = 0.5 BNB
-  Revenue:          0.5 BNB (~$200 at $400/BNB)
-  Costs:            ~$90 (infra)
-  Net:              +$110
+**Revenue from marketplace:**
+- Listing fees (flat fee to list an agent for sale)
+- Transaction fees (percentage of sale price)
+- Featured listings (premium placement)
+- Verified creator badges (annual fee)
 
-Month 3 (Growth):
-  Free mints:       1,000 users × 3 = 3,000 free agents
-  Paid mints:       500 agents × 0.01 BNB = 5 BNB
-  Revenue:          5 BNB (~$2,000)
-  Costs:            ~$150 (infra + marketing)
-  Net:              +$1,850
+### Marketplace pricing
 
-Month 6 (Scale):
-  Free mints:       5,000 users × 3 = 15,000 free agents
-  Paid mints:       3,000 agents × 0.01 BNB = 30 BNB
-  Agent funding TVL: 100 BNB locked in agents
-  Revenue:          30 BNB (~$12,000)
-  Costs:            ~$500 (infra + team)
-  Net:              +$11,500
-```
+- Listing fee: 0 (free to list, to encourage volume)
+- Transaction fee: 2-5% of sale price
+- Featured listing: 0.05-0.1 BNB per week
+- Verified badge: 0.5-1 BNB per year
 
 ---
 
-## Competitive Positioning
+## Output Format
 
-| Feature | BAP-578 NFA | Generic NFT | SBT (Soulbound) |
-|---------|------------|-------------|-----------------|
-| On-chain identity | ✅ Structured metadata | ❌ Only tokenURI | ✅ But no funds |
-| Agent funds | ✅ Per-agent BNB balance | ❌ | ❌ |
-| Logic binding | ✅ `logicAddress` for behavior | ❌ | ❌ |
-| Free tier | ✅ 3 free mints (soulbound) | ❌ | N/A |
-| Paid tier transferable | ✅ Full ERC-721 transfer | ✅ | ❌ |
-| Upgradeable | ✅ UUPS | Depends | Depends |
-| Vault integrity | ✅ Hash-anchored | ❌ | ❌ |
-| Anti-farming | ✅ Free mints non-transferable | ❌ | ✅ (all non-transferable) |
+When asked for business guidance, respond with:
+
+1. **Objective** (what business goal is being addressed)
+2. **Model** (funnel, pricing, fee strategy, or policy)
+3. **KPIs** to track (with data sources)
+4. **Financial projections** (if applicable)
+5. **Risks** and mitigations
+6. **Next actions** (concrete steps to execute)
 
 ---
 
 ## Related Skills
 
-- **`bap578`** — Core contract spec, build/test/deploy workflows
-- **`frontend-web3-bap578`** — Next.js frontend integration with React hooks
-- **`bap578-scanner`** — Agent lookup, verification, audit, and risk detection
+- `bap578`
+- `bap578-analytics`
+- `bap578-agent-economy`

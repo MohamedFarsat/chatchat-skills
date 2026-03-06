@@ -2,233 +2,627 @@
 id: bap578-testing
 name: BAP-578 Testing
 description: >
-  Comprehensive testing strategies for BAP-578 Non-Fungible Agents. Covers
-  unit tests, integration tests, upgrade tests, gas profiling, edge cases,
-  and test-driven development patterns using Hardhat and Chai. Use when
-  writing, running, or debugging tests for BAP-578 contracts.
+  Testing strategies for BAP-578 Non-Fungible Agents. Covers unit tests,
+  integration tests, upgrade tests, and edge cases using Hardhat and Chai.
+  Use when writing, running, or debugging tests for BAP-578 contracts.
 category: BAP-578
 author: community
 version: 1.0.0
 examples:
   - "How to test BAP-578 contracts"
-  - "Write tests for the createAgent function"
+  - "Write tests for createAgent"
   - "What edge cases should I test?"
-  - "Run BAP-578 test suite"
+  - "Run the BAP-578 test suite"
   - "Test the free mint logic"
   - "Debug a failing BAP-578 test"
 ---
 
 # BAP-578 Testing
 
-Use this skill when writing, running, debugging, or expanding the test suite for BAP-578 Non-Fungible Agents. Covers every testable aspect of the contract with patterns, examples, and a complete edge-case checklist.
+Use this skill to write, run, debug, and extend the test suite for BAP-578 Non-Fungible Agents. This covers test infrastructure setup, comprehensive test cases for every contract function, edge case coverage, upgrade testing, gas profiling, and debugging strategies.
 
 ---
 
-## The Four Identity Questions — Testing Perspective
+## When to use this skill
 
-### 1 · Who are you?
+- Writing new tests for BAP-578 contract functions.
+- Running the existing test suite and interpreting results.
+- Adding edge case coverage for minting, funding, and withdrawal.
+- Testing access control boundaries.
+- Writing upgrade tests (V1 → V2 state preservation).
+- Debugging failing tests with specific error messages.
+- Measuring gas usage for optimization.
 
-I am the **quality gate** for BAP-578. I answer: **"Does this contract do what it claims, and nothing it shouldn't?"**
+---
 
-The existing test suite (`test/BAP578.test.js`) covers 25+ test cases across 7 categories. I help you understand, run, extend, and debug these tests.
+## The Four Identity Questions (Testing View)
 
-**In short:** "I prove the contract works. If I pass, ship it. If I fail, fix it."
+### 1) Who are you?
 
-### 2 · What do you remember?
+The testing layer is the quality gate for the entire contract. Tests prove that every function behaves correctly, every access control is enforced, every edge case is handled, and every upgrade preserves state. Without comprehensive tests, the contract cannot be trusted for deployment.
 
-I track **every behavior the contract should exhibit**:
+### 2) What do you remember?
 
-| Test category | Cases | What's verified |
-|---------------|-------|----------------|
-| Deployment | 3 | Name, symbol, treasury, owner correctly set |
-| Free Mints | 4 | 3 free per user, payment after, self-only, non-transferable |
-| Agent Creation | 3 | Free mint, paid mint, extended metadata storage |
-| Agent Management | 7 | Status, funding, withdrawal, logic address, metadata, pause, ownership |
-| View Functions | 4 | State query, tokens of owner, total supply, free mints remaining |
-| Admin Functions | 5 | Pause, treasury, owner-only guard, bonus mints, emergency withdraw |
-| UUPS Upgrade | 2 | State preservation, owner-only upgrade |
+The test suite remembers every expected behavior: valid minting flows, fee calculations, free mint restrictions, transfer rules, withdrawal safety, status toggles, metadata updates, and admin operations. Each test case is a documented expectation of how the contract should work.
 
-### 3 · What can you do?
+### 3) What can you do?
 
-#### Running Tests
+- Run the full test suite with a single command
+- Test individual functions in isolation (unit tests)
+- Test multi-step workflows (integration tests)
+- Test upgrade state preservation
+- Measure gas consumption per function
+- Verify error messages for invalid operations
+- Simulate attacks and verify they fail
+
+### 4) How can I trust it?
+
+Tests map directly to contract functions and user stories. Every test has a clear description, setup, action, and assertion. Tests run against a local Hardhat network with deterministic results. Coverage tools can verify that all code paths are exercised.
+
+---
+
+## Test Infrastructure
+
+### Setup
 
 ```bash
 cd non-fungible-agents-BAP-578
+npm install
+```
 
+### Running tests
+
+```bash
 # Run all tests
 npm test
 
-# Run with gas reporting
-REPORT_GAS=true npm test
+# Run with verbose output
+npx hardhat test --verbose
 
-# Run specific test file
-npx hardhat test test/BAP578.test.js
+# Run a specific test file
+npx hardhat test test/NonFungibleAgents.test.js
+
+# Run with gas reporting
+REPORT_GAS=true npx hardhat test
 
 # Run with coverage
-npm run coverage
-
-# Run a single test (grep pattern)
-npx hardhat test --grep "Should allow first 3 mints for free"
+npx hardhat coverage
 ```
 
-#### Test Structure
+### Test file structure
 
-Every test follows this pattern:
-
-```javascript
-describe("Category", function () {
-    beforeEach(async function () {
-        // Deploy fresh contract + set up test state
-    });
-
-    it("Should [expected behavior]", async function () {
-        // Arrange: set up specific state
-        // Act: call the function
-        // Assert: check results
-    });
-});
+```
+test/
+├── NonFungibleAgents.test.js    # Main test suite
+├── helpers/
+│   ├── fixtures.js              # Reusable deployment fixtures
+│   └── constants.js             # Test constants
+└── upgrade/
+    └── upgrade.test.js          # Upgrade-specific tests
 ```
 
-#### Helper Function
+---
 
-```javascript
-function createAgentMetadata(overrides = {}) {
-    return {
-        persona: overrides.persona || '{"traits": "friendly", "style": "casual"}',
-        experience: overrides.experience || "AI Assistant specialized in blockchain",
-        voiceHash: overrides.voiceHash || "voice_001",
-        animationURI: overrides.animationURI || "ipfs://animation1",
-        vaultURI: overrides.vaultURI || "ipfs://vault1",
-        vaultHash: overrides.vaultHash || ethers.utils.formatBytes32String("vault1"),
-    };
+## Test Fixtures
+
+### Standard deployment fixture
+
+```js
+const { ethers, upgrades } = require("hardhat");
+
+async function deployFixture() {
+  const [owner, treasury, user1, user2, user3] = await ethers.getSigners();
+
+  const NFA = await ethers.getContractFactory("NonFungibleAgents");
+  const nfa = await upgrades.deployProxy(NFA, [
+    "Non-Fungible Agents",
+    "NFA",
+    treasury.address,
+  ], { kind: "uups" });
+
+  const MINT_FEE = ethers.parseEther("0.01");
+  const DEFAULT_FREE_MINTS = 3;
+
+  const defaultMetadata = {
+    persona: JSON.stringify({ name: "TestAgent", traits: ["helpful"] }),
+    experience: "Test agent for unit testing",
+    voiceHash: "",
+    animationURI: "",
+    vaultURI: "",
+    vaultHash: ethers.ZeroHash,
+  };
+
+  return {
+    nfa,
+    owner,
+    treasury,
+    user1,
+    user2,
+    user3,
+    MINT_FEE,
+    DEFAULT_FREE_MINTS,
+    defaultMetadata,
+  };
+}
+
+module.exports = { deployFixture };
+```
+
+### Fixture with pre-minted agents
+
+```js
+async function deployWithAgentsFixture() {
+  const base = await deployFixture();
+  const { nfa, user1, user2, defaultMetadata } = base;
+
+  // Mint 3 free agents for user1
+  for (let i = 0; i < 3; i++) {
+    await nfa.connect(user1).createAgent(
+      user1.address,
+      ethers.ZeroAddress,
+      `ipfs://meta${i}`,
+      { ...defaultMetadata, experience: `Agent ${i}` }
+    );
+  }
+
+  // Mint 1 paid agent for user2
+  await nfa.connect(user2).createAgent(
+    user2.address,
+    ethers.ZeroAddress,
+    "ipfs://meta-paid",
+    defaultMetadata,
+    { value: base.MINT_FEE }
+  );
+
+  return { ...base, user1AgentIds: [1, 2, 3], user2AgentId: 4 };
 }
 ```
 
-#### Edge Cases Checklist
+---
 
-**Minting:**
-- [ ] First 3 mints are free (no value required)
-- [ ] 4th mint requires exactly 0.01 BNB
-- [ ] Free mints can only be to self (`to == msg.sender`)
-- [ ] Paid mints can be to any address
-- [ ] Free-minted tokens are non-transferable
-- [ ] Free-minted tokens can be burned (with zero balance)
-- [ ] Mint to zero address reverts
-- [ ] Mint with wrong fee amount reverts
-- [ ] Mint when paused reverts
-- [ ] Token IDs increment correctly (1, 2, 3...)
-- [ ] AgentCreated event emitted with correct args
-- [ ] Treasury receives fee on paid mint
-- [ ] Metadata stored correctly for all 6 fields
+## Comprehensive Test Cases
 
-**Funding & Withdrawal:**
-- [ ] Anyone can fund any agent
-- [ ] Fund when paused reverts
-- [ ] Fund non-existent token reverts
-- [ ] Withdraw full balance succeeds
-- [ ] Withdraw partial balance succeeds
-- [ ] Withdraw more than balance reverts
-- [ ] Only token owner can withdraw
-- [ ] Reentrancy on withdraw is blocked
-- [ ] BNB actually arrives at recipient
-- [ ] Agent balance updates correctly
-- [ ] Events emitted correctly
+### Minting Tests
 
-**Agent Management:**
-- [ ] Only owner can toggle status
-- [ ] Only owner can set logic address
-- [ ] Logic address must be contract (not EOA)
-- [ ] Zero address is valid for logic (unbind)
-- [ ] Only owner can update metadata
-- [ ] All 6 metadata fields update correctly
-- [ ] Token URI updates correctly
-- [ ] Events emitted for each change
+```js
+describe("createAgent", function () {
+  describe("Free mints", function () {
+    it("allows free mint to self", async function () {
+      const { nfa, user1, defaultMetadata } = await deployFixture();
+      await expect(
+        nfa.connect(user1).createAgent(
+          user1.address,
+          ethers.ZeroAddress,
+          "ipfs://meta",
+          defaultMetadata
+        )
+      ).to.emit(nfa, "AgentCreated");
+    });
 
-**Admin:**
-- [ ] Only contract owner can pause
-- [ ] Only contract owner can change treasury
-- [ ] Treasury cannot be zero address
-- [ ] Only contract owner can grant bonus mints
-- [ ] Bonus mints stack with default
-- [ ] Emergency withdraw sends all balance to owner
-- [ ] Emergency withdraw with zero balance reverts
-- [ ] Direct BNB send to contract reverts
+    it("reverts free mint to different address", async function () {
+      const { nfa, user1, user2, defaultMetadata } = await deployFixture();
+      await expect(
+        nfa.connect(user1).createAgent(
+          user2.address,
+          ethers.ZeroAddress,
+          "ipfs://meta",
+          defaultMetadata
+        )
+      ).to.be.revertedWith("Free mints must be to self");
+    });
 
-**Upgrade:**
-- [ ] State preserved after upgrade (all fields)
-- [ ] V2 functions work after upgrade
-- [ ] V1 functions still work after upgrade
-- [ ] Only owner can authorize upgrade
-- [ ] Token counter continues correctly
-- [ ] Agent balances preserved
+    it("tracks free mint count per user", async function () {
+      const { nfa, user1, defaultMetadata } = await deployFixture();
 
-#### Writing New Tests
+      const initialFree = await nfa.getFreeMints(user1.address);
+      await nfa.connect(user1).createAgent(
+        user1.address, ethers.ZeroAddress, "ipfs://meta", defaultMetadata
+      );
+      const afterFree = await nfa.getFreeMints(user1.address);
 
-**Pattern for testing a new function:**
+      expect(afterFree).to.equal(initialFree - 1n);
+    });
 
-```javascript
-describe("New Feature", function () {
-    let nfa, owner, addr1, addr2, treasury;
+    it("marks free-minted tokens as non-transferable", async function () {
+      const { nfa, user1, user2, defaultMetadata } = await deployFixture();
 
-    beforeEach(async function () {
-        [owner, addr1, addr2, treasury] = await ethers.getSigners();
-        const BAP578 = await ethers.getContractFactory("BAP578");
-        nfa = await upgrades.deployProxy(BAP578,
-            ["Non-Fungible Agents", "NFA", treasury.address],
-            { initializer: "initialize", kind: "uups" }
+      await nfa.connect(user1).createAgent(
+        user1.address, ethers.ZeroAddress, "ipfs://meta", defaultMetadata
+      );
+
+      expect(await nfa.isFreeMint(1)).to.be.true;
+
+      await expect(
+        nfa.connect(user1).transferFrom(user1.address, user2.address, 1)
+      ).to.be.reverted;
+    });
+
+    it("exhausts free mints after allocation", async function () {
+      const { nfa, user1, defaultMetadata, DEFAULT_FREE_MINTS } = await deployFixture();
+
+      for (let i = 0; i < DEFAULT_FREE_MINTS; i++) {
+        await nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, `ipfs://meta${i}`, defaultMetadata
         );
+      }
+
+      expect(await nfa.getFreeMints(user1.address)).to.equal(0);
+    });
+  });
+
+  describe("Paid mints", function () {
+    it("requires exact fee after free mints exhausted", async function () {
+      const { nfa, user1, defaultMetadata, MINT_FEE, DEFAULT_FREE_MINTS } = await deployFixture();
+
+      // Exhaust free mints
+      for (let i = 0; i < DEFAULT_FREE_MINTS; i++) {
+        await nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, `ipfs://meta${i}`, defaultMetadata
+        );
+      }
+
+      // Paid mint with correct fee
+      await expect(
+        nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, "ipfs://paid", defaultMetadata,
+          { value: MINT_FEE }
+        )
+      ).to.emit(nfa, "AgentCreated");
     });
 
-    it("Should succeed with valid input", async function () {
-        // Happy path
-        const tx = await nfa.connect(addr1).someFunction(validArgs);
-        await expect(tx).to.emit(nfa, "ExpectedEvent").withArgs(expectedArgs);
-        expect(await nfa.someView()).to.equal(expectedValue);
+    it("reverts with incorrect fee", async function () {
+      const { nfa, user1, defaultMetadata, DEFAULT_FREE_MINTS } = await deployFixture();
+
+      for (let i = 0; i < DEFAULT_FREE_MINTS; i++) {
+        await nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, `ipfs://meta${i}`, defaultMetadata
+        );
+      }
+
+      await expect(
+        nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, "ipfs://paid", defaultMetadata,
+          { value: ethers.parseEther("0.005") }
+        )
+      ).to.be.revertedWith("Incorrect fee");
     });
 
-    it("Should revert with invalid input", async function () {
-        await expect(
-            nfa.connect(addr1).someFunction(invalidArgs)
-        ).to.be.revertedWith("Expected error message");
+    it("allows paid mint to different address", async function () {
+      const { nfa, user1, user2, defaultMetadata, MINT_FEE, DEFAULT_FREE_MINTS } = await deployFixture();
+
+      for (let i = 0; i < DEFAULT_FREE_MINTS; i++) {
+        await nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, `ipfs://meta${i}`, defaultMetadata
+        );
+      }
+
+      await nfa.connect(user1).createAgent(
+        user2.address, ethers.ZeroAddress, "ipfs://gift", defaultMetadata,
+        { value: MINT_FEE }
+      );
+
+      expect(await nfa.ownerOf(DEFAULT_FREE_MINTS + 1)).to.equal(user2.address);
     });
 
-    it("Should enforce access control", async function () {
-        await expect(
-            nfa.connect(addr2).adminFunction()
-        ).to.be.revertedWith("Ownable: caller is not the owner");
+    it("sends fee to treasury", async function () {
+      const { nfa, user1, treasury, defaultMetadata, MINT_FEE, DEFAULT_FREE_MINTS } = await deployFixture();
+
+      for (let i = 0; i < DEFAULT_FREE_MINTS; i++) {
+        await nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, `ipfs://meta${i}`, defaultMetadata
+        );
+      }
+
+      await expect(
+        nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, "ipfs://paid", defaultMetadata,
+          { value: MINT_FEE }
+        )
+      ).to.changeEtherBalance(treasury, MINT_FEE);
     });
+
+    it("paid tokens are transferable", async function () {
+      const { nfa, user1, user2, defaultMetadata, MINT_FEE, DEFAULT_FREE_MINTS } = await deployFixture();
+
+      for (let i = 0; i < DEFAULT_FREE_MINTS; i++) {
+        await nfa.connect(user1).createAgent(
+          user1.address, ethers.ZeroAddress, `ipfs://meta${i}`, defaultMetadata
+        );
+      }
+
+      const tokenId = DEFAULT_FREE_MINTS + 1;
+      await nfa.connect(user1).createAgent(
+        user1.address, ethers.ZeroAddress, "ipfs://paid", defaultMetadata,
+        { value: MINT_FEE }
+      );
+
+      expect(await nfa.isFreeMint(tokenId)).to.be.false;
+
+      await nfa.connect(user1).transferFrom(user1.address, user2.address, tokenId);
+      expect(await nfa.ownerOf(tokenId)).to.equal(user2.address);
+    });
+  });
 });
 ```
 
-#### Debugging Failed Tests
+### Funding and Withdrawal Tests
 
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| "Token does not exist" | Token ID doesn't exist yet | Mint first in `beforeEach` |
-| "Not token owner" | Wrong signer used | Use `.connect(correctSigner)` |
-| "Incorrect fee" | Free mints exhausted, no value sent | Add `{ value: MINT_FEE }` |
-| "Contract is paused" | Previous test paused contract | Check `beforeEach` resets state |
-| Gas estimation failed | Transaction would revert | Check revert reason in the call |
-| Timeout | Slow network or large test | Increase mocha timeout in hardhat.config.js |
+```js
+describe("Agent funding", function () {
+  it("funds an agent with BNB", async function () {
+    const { nfa, user1 } = await deployWithAgentsFixture();
+    const amount = ethers.parseEther("0.5");
 
-### 4 · How can I trust it?
+    await expect(
+      nfa.connect(user1).fundAgent(1, { value: amount })
+    ).to.emit(nfa, "AgentFunded").withArgs(1, user1.address, amount);
 
-Testing trust comes from **coverage and correctness**:
+    const state = await nfa.getAgentState(1);
+    expect(state.balance).to.equal(amount);
+  });
 
-- **28+ test cases** covering all contract functions.
-- **Revert testing** — every invalid path is checked for correct error messages.
-- **Event verification** — `to.emit()` confirms events fire with correct args.
-- **State checks** — every write function is followed by a read to verify state changed.
-- **Access control tests** — every restricted function tested with unauthorized caller.
-- **Upgrade tests** — full state preservation verified across V1 → V2.
-- **Coverage report** — `npm run coverage` shows line/branch/function coverage percentages.
+  it("allows anyone to fund any agent", async function () {
+    const { nfa, user2 } = await deployWithAgentsFixture();
+    const amount = ethers.parseEther("0.1");
 
-**In short:** "Trust the tests because they cover happy paths, error paths, access control, events, state changes, and upgrades. Run `npm test` — if all pass, the contract is behaving as designed."
+    await nfa.connect(user2).fundAgent(1, { value: amount });
+    const state = await nfa.getAgentState(1);
+    expect(state.balance).to.equal(amount);
+  });
+});
+
+describe("Agent withdrawal", function () {
+  it("allows token owner to withdraw", async function () {
+    const { nfa, user1 } = await deployWithAgentsFixture();
+    const fundAmount = ethers.parseEther("1.0");
+    const withdrawAmount = ethers.parseEther("0.5");
+
+    await nfa.connect(user1).fundAgent(1, { value: fundAmount });
+
+    await expect(
+      nfa.connect(user1).withdrawFromAgent(1, withdrawAmount)
+    ).to.changeEtherBalance(user1, withdrawAmount);
+
+    const state = await nfa.getAgentState(1);
+    expect(state.balance).to.equal(fundAmount - withdrawAmount);
+  });
+
+  it("reverts withdrawal by non-owner", async function () {
+    const { nfa, user1, user2 } = await deployWithAgentsFixture();
+
+    await nfa.connect(user1).fundAgent(1, { value: ethers.parseEther("1.0") });
+
+    await expect(
+      nfa.connect(user2).withdrawFromAgent(1, ethers.parseEther("0.5"))
+    ).to.be.reverted;
+  });
+
+  it("reverts withdrawal exceeding balance", async function () {
+    const { nfa, user1 } = await deployWithAgentsFixture();
+
+    await nfa.connect(user1).fundAgent(1, { value: ethers.parseEther("0.5") });
+
+    await expect(
+      nfa.connect(user1).withdrawFromAgent(1, ethers.parseEther("1.0"))
+    ).to.be.reverted;
+  });
+});
+```
+
+### Access Control Tests
+
+```js
+describe("Access control", function () {
+  it("only owner can set treasury", async function () {
+    const { nfa, user1 } = await deployFixture();
+    await expect(
+      nfa.connect(user1).setTreasury(user1.address)
+    ).to.be.reverted;
+  });
+
+  it("only owner can pause", async function () {
+    const { nfa, user1 } = await deployFixture();
+    await expect(
+      nfa.connect(user1).setPaused(true)
+    ).to.be.reverted;
+  });
+
+  it("only owner can grant free mints", async function () {
+    const { nfa, user1, user2 } = await deployFixture();
+    await expect(
+      nfa.connect(user1).grantAdditionalFreeMints(user2.address, 5)
+    ).to.be.reverted;
+  });
+
+  it("only token owner can set agent status", async function () {
+    const { nfa, user2 } = await deployWithAgentsFixture();
+    await expect(
+      nfa.connect(user2).setAgentStatus(1, false)
+    ).to.be.reverted;
+  });
+
+  it("only token owner can set logic address", async function () {
+    const { nfa, user2 } = await deployWithAgentsFixture();
+    await expect(
+      nfa.connect(user2).setLogicAddress(1, ethers.ZeroAddress)
+    ).to.be.reverted;
+  });
+
+  it("only token owner can update metadata", async function () {
+    const { nfa, user2, defaultMetadata } = await deployWithAgentsFixture();
+    await expect(
+      nfa.connect(user2).updateAgentMetadata(1, "ipfs://new", defaultMetadata)
+    ).to.be.reverted;
+  });
+});
+```
+
+### Metadata and Status Tests
+
+```js
+describe("Agent status", function () {
+  it("toggles agent status", async function () {
+    const { nfa, user1 } = await deployWithAgentsFixture();
+
+    await nfa.connect(user1).setAgentStatus(1, false);
+    let state = await nfa.getAgentState(1);
+    expect(state.active).to.be.false;
+
+    await nfa.connect(user1).setAgentStatus(1, true);
+    state = await nfa.getAgentState(1);
+    expect(state.active).to.be.true;
+  });
+
+  it("emits AgentStatusChanged event", async function () {
+    const { nfa, user1 } = await deployWithAgentsFixture();
+    await expect(
+      nfa.connect(user1).setAgentStatus(1, false)
+    ).to.emit(nfa, "AgentStatusChanged").withArgs(1, false);
+  });
+});
+
+describe("Metadata updates", function () {
+  it("updates agent metadata", async function () {
+    const { nfa, user1 } = await deployWithAgentsFixture();
+
+    const newMetadata = {
+      persona: JSON.stringify({ name: "Updated" }),
+      experience: "Updated experience",
+      voiceHash: "newvoice",
+      animationURI: "ipfs://newanim",
+      vaultURI: "ipfs://newvault",
+      vaultHash: ethers.keccak256(ethers.toUtf8Bytes("vault content")),
+    };
+
+    await nfa.connect(user1).updateAgentMetadata(1, "ipfs://newuri", newMetadata);
+
+    const meta = await nfa.getAgentMetadata(1);
+    expect(meta.experience).to.equal("Updated experience");
+    expect(meta.vaultURI).to.equal("ipfs://newvault");
+  });
+
+  it("emits MetadataUpdated event", async function () {
+    const { nfa, user1, defaultMetadata } = await deployWithAgentsFixture();
+    await expect(
+      nfa.connect(user1).updateAgentMetadata(1, "ipfs://new", defaultMetadata)
+    ).to.emit(nfa, "MetadataUpdated").withArgs(1, "ipfs://new");
+  });
+});
+```
+
+---
+
+## Debugging Failed Tests
+
+### Common error messages and causes
+
+- **"Incorrect fee"** — sent wrong `msg.value`; check if free mints remain
+- **"Free mints must be to self"** — tried to mint free token to different address
+- **"Not token owner"** — wrong signer; check `connect(correctUser)`
+- **"Contract is paused"** — call `setPaused(false)` in setup
+- **"Invalid logic address"** — passed EOA instead of contract address
+- **"Insufficient balance"** — tried to withdraw more than agent balance
+
+### Debugging approach
+
+1. Read the full error message (use `--verbose` flag).
+2. Check which `require` or custom error is triggered.
+3. Verify test setup (correct fixture, correct signer).
+4. Add `console.log` in the contract temporarily for deeper debugging.
+5. Use Hardhat's `console.sol` import for in-contract logging.
+
+---
+
+## Gas Profiling
+
+```bash
+REPORT_GAS=true npx hardhat test
+```
+
+This outputs a table showing gas usage per function call. Use it to:
+
+- Identify expensive operations
+- Compare gas before and after optimizations
+- Set gas expectations in tests
+
+### Example gas assertions
+
+```js
+it("mint gas should be under 400k", async function () {
+  const tx = await nfa.connect(user1).createAgent(
+    user1.address, ethers.ZeroAddress, "ipfs://meta", defaultMetadata
+  );
+  const receipt = await tx.wait();
+  expect(receipt.gasUsed).to.be.lt(400000n);
+});
+```
+
+---
+
+## Edge Cases to Always Test
+
+### Boundary conditions
+
+- Mint the last free token (free mints = 1, then mint)
+- Withdraw exact full balance (balance goes to 0)
+- Fund with 0 value (should it revert or no-op?)
+- Set logic address to self (contract calling itself)
+- Update metadata with empty strings
+- Transfer paid token to the zero address (should revert)
+- Call functions on non-existent token IDs
+
+### Concurrency patterns
+
+- Two users minting simultaneously (no collision on token IDs)
+- Fund and withdraw in the same block
+- Multiple metadata updates in a single block
+
+### Upgrade edge cases
+
+- Upgrade while contract is paused
+- Upgrade with agents that have non-zero balances
+- Upgrade with agents that have bound logic contracts
+- Call V2 functions from V1 ABI (should fail gracefully)
+
+---
+
+## Coverage Reporting
+
+```bash
+npx hardhat coverage
+```
+
+Generates an HTML report in `coverage/index.html`. Target metrics:
+
+| Category | Target |
+|----------|--------|
+| Statements | > 95% |
+| Branches | > 90% |
+| Functions | 100% |
+| Lines | > 95% |
+
+Review uncovered lines to identify missing test cases. Pay special attention to:
+- Error branches (require/revert paths)
+- Edge cases in conditional logic
+- Admin-only functions
+- Transfer restriction hooks
+
+---
+
+## Output Format
+
+When asked for testing help, respond with:
+
+1. **Test goal** (what behavior is being verified)
+2. **Complete test code** (setup, action, assertions)
+3. **Expected outcomes** (pass/fail conditions)
+4. **Edge cases to add** (what else should be tested)
+5. **Failure diagnosis** if a test is failing
 
 ---
 
 ## Related Skills
 
-- **`bap578`** — Core contract spec and function reference
-- **`bap578-security-audit`** — Security-focused test recommendations
-- **`bap578-upgrade`** — Upgrade-specific testing patterns
+- `bap578`
+- `bap578-upgrade`
+- `bap578-security-audit`

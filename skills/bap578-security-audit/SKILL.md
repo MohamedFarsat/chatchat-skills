@@ -2,10 +2,9 @@
 id: bap578-security-audit
 name: BAP-578 Security Audit
 description: >
-  Security audit checklist, vulnerability assessment, and threat modeling for
-  BAP-578 Non-Fungible Agents on BNB Chain. Covers reentrancy, access control,
-  upgrade safety, fund management risks, logic contract threats, and off-chain
-  data integrity. Use when auditing, reviewing, or hardening a BAP-578 deployment.
+  Security audit checklist and threat model for BAP-578 Non-Fungible Agents.
+  Covers reentrancy, access control, upgrade safety, fund management, logic
+  contract risks, and off-chain integrity. Use when auditing or hardening NFA.
 category: BAP-578
 author: community
 version: 1.0.0
@@ -20,217 +19,425 @@ examples:
 
 # BAP-578 Security Audit
 
-Use this skill when auditing, reviewing, or hardening a BAP-578 Non-Fungible Agents deployment. This covers vulnerability assessment, threat modeling, access control review, and a comprehensive audit checklist grounded in the actual contract code.
+Use this skill to audit, harden, and verify the security posture of BAP-578 Non-Fungible Agents deployments. This skill provides a structured threat model, detailed audit checklist, vulnerability patterns specific to the NFA architecture, and remediation guidance.
 
 ---
 
-## The Four Identity Questions — Security Perspective
+## When to use this skill
 
-### 1 · Who are you?
-
-I am the **security auditor** for BAP-578. I answer the question that protects users and funds: **"What can go wrong, and has it been prevented?"**
-
-I examine every function, modifier, state transition, and external interaction in the BAP-578 contract to identify:
-- Vulnerabilities (reentrancy, overflow, access bypass)
-- Misconfigurations (wrong treasury, unverified logic contracts)
-- Operational risks (key compromise, upgrade abuse, pause misuse)
-- Off-chain trust gaps (vault tampering, URI hijacking)
-
-**In short:** "I am the adversary's mirror. I think like an attacker so you don't get attacked."
-
-### 2 · What do you remember?
-
-I maintain a **security knowledge base** for BAP-578:
-
-| Category | What I track |
-|----------|-------------|
-| Known patterns | OpenZeppelin security patterns used in the contract |
-| Attack vectors | Reentrancy, front-running, access control bypass, upgrade hijack |
-| Contract guards | `nonReentrant`, `onlyOwner`, `onlyTokenOwner`, `whenNotPaused` |
-| Historical exploits | Common ERC-721 and UUPS proxy vulnerabilities from the ecosystem |
-| Audit findings | Results from reviewing this specific codebase |
-| Dependency versions | OpenZeppelin 4.9.6, Solidity 0.8.28, Hardhat 2.24.2 |
-
-### 3 · What can you do?
-
-#### Threat Model
-
-```
-┌────────────────────────────────────────────────┐
-│           BAP-578 Threat Surface               │
-├────────────────────────────────────────────────┤
-│                                                │
-│  EXTERNAL ATTACKERS                            │
-│  ├─ Reentrancy on withdrawFromAgent            │
-│  ├─ Front-running createAgent                  │
-│  ├─ Malicious logic contract binding           │
-│  ├─ Free-mint farming via multiple wallets     │
-│  └─ Vault content spoofing                     │
-│                                                │
-│  COMPROMISED OWNER KEY                         │
-│  ├─ Pause contract indefinitely                │
-│  ├─ Emergency withdraw all contract funds      │
-│  ├─ Redirect treasury to attacker              │
-│  ├─ Push malicious upgrade                     │
-│  └─ Grant unlimited free mints                 │
-│                                                │
-│  LOGIC CONTRACT RISKS                          │
-│  ├─ Bound contract is malicious/backdoored     │
-│  ├─ Bound contract self-destructs              │
-│  └─ Logic address points to upgradeable proxy  │
-│                                                │
-│  OFF-CHAIN RISKS                               │
-│  ├─ Vault URI points to compromised server     │
-│  ├─ Metadata URI content changes without       │
-│  │  on-chain update                            │
-│  └─ IPFS content unpinned / unavailable        │
-│                                                │
-└────────────────────────────────────────────────┘
-```
-
-#### Vulnerability Checklist
-
-**Reentrancy**
-
-| Function | Reentrancy risk | Mitigation in code | Status |
-|----------|----------------|-------------------|--------|
-| `createAgent` | Low (external call to treasury) | `nonReentrant` modifier | ✅ Protected |
-| `fundAgent` | None (no external call) | N/A | ✅ Safe |
-| `withdrawFromAgent` | High (sends BNB via `.call`) | `nonReentrant` + Checks-Effects-Interactions | ✅ Protected |
-| `emergencyWithdraw` | Medium (sends BNB via `.call`) | `onlyOwner` (no `nonReentrant`) | ⚠️ Relies on owner trust only |
-
-**Access Control**
-
-| Function | Required role | Modifier | Bypass risk |
-|----------|-------------|----------|-------------|
-| `createAgent` | Anyone | `whenNotPaused` | Low — gated by fee or free mint logic |
-| `fundAgent` | Anyone | `whenNotPaused` | Low — anyone can fund any agent |
-| `withdrawFromAgent` | Token owner | `onlyTokenOwner` | None — checked against `ownerOf` |
-| `setAgentStatus` | Token owner | `onlyTokenOwner` | None |
-| `setLogicAddress` | Token owner | `onlyTokenOwner` | None |
-| `updateAgentMetadata` | Token owner | `onlyTokenOwner` | None |
-| `grantAdditionalFreeMints` | Contract owner | `onlyOwner` | Key compromise risk |
-| `setTreasury` | Contract owner | `onlyOwner` | Key compromise risk |
-| `setPaused` | Contract owner | `onlyOwner` | Key compromise risk |
-| `emergencyWithdraw` | Contract owner | `onlyOwner` | Key compromise risk |
-| `_authorizeUpgrade` | Contract owner | `onlyOwner` | Key compromise risk |
-
-**Fund Safety**
-
-| Risk | Assessment | Details |
-|------|-----------|---------|
-| Agent balance tracking | ✅ Safe | `agentStates[tokenId].balance` updated before external call |
-| Treasury transfer on paid mint | ✅ Safe | `require(success)` checks return value |
-| Withdrawal pattern | ✅ Safe | CEI pattern: state update → event → external call |
-| Emergency withdraw | ⚠️ Risk | Drains entire contract balance, not per-agent — could affect agent balances |
-| Direct BNB sends | ✅ Safe | `receive()` reverts |
-
-**Upgrade Safety**
-
-| Risk | Assessment | Details |
-|------|-----------|---------|
-| Unauthorized upgrade | ✅ Protected | `_authorizeUpgrade` requires `onlyOwner` |
-| Storage collision | ⚠️ Manual review needed | New state variables must be appended, never inserted |
-| Initialization bypass | ✅ Protected | `_disableInitializers()` in constructor |
-| State preservation | ✅ Tested | V2 mock test confirms state preservation |
-
-**Logic Contract Risks**
-
-| Risk | Assessment | Mitigation |
-|------|-----------|------------|
-| EOA as logic address | ✅ Blocked | `logicAddress.code.length > 0` check |
-| Malicious contract | ⚠️ Not audited by BAP-578 | User responsibility to verify logic contract |
-| Self-destructed contract | ⚠️ Post-bind risk | Code length check only at bind time, not ongoing |
-| Upgradeable proxy as logic | ⚠️ Risk | Logic could change behavior without re-binding |
-
-#### Audit Checklist
-
-```
-BAP-578 Security Audit Checklist
-═══════════════════════════════════
-
-SMART CONTRACT
-  [✅] Compiler version: Solidity 0.8.28 (overflow protection built-in)
-  [✅] OpenZeppelin base: v4.9.6 (battle-tested)
-  [✅] Reentrancy protection: nonReentrant on createAgent, withdrawFromAgent
-  [✅] CEI pattern: withdrawFromAgent updates state before external call
-  [✅] Access control: onlyOwner for admin, onlyTokenOwner for agent management
-  [✅] Pause mechanism: whenNotPaused on createAgent and fundAgent
-  [✅] Zero-address checks: treasury, mint recipient
-  [✅] Logic address validation: must be contract or zero address
-  [✅] Free-mint non-transferable: _beforeTokenTransfer blocks transfers
-  [✅] Burn requires zero balance: _burn checks agentStates[tokenId].balance == 0
-  [✅] Direct BNB send rejected: receive() reverts
-
-UPGRADE SAFETY
-  [✅] UUPS pattern with _authorizeUpgrade override
-  [✅] Initializers disabled in constructor
-  [✅] V2 upgrade tested with state preservation
-  [⚠️] Storage layout: manually verify no slot collisions on future upgrades
-
-OPERATIONAL SECURITY
-  [⚠️] Owner is EOA: recommend multisig for production
-  [⚠️] emergencyWithdraw drains all: may desync agent balance tracking
-  [⚠️] No timelock on admin functions: owner changes take effect immediately
-  [⚠️] No event for setFreeMintsPerUser: state change not easily auditable
-
-OFF-CHAIN SECURITY
-  [⚠️] Vault URI mutable: owner can change vaultURI without content guarantee
-  [✅] Vault hash anchors integrity: keccak256 verification possible
-  [⚠️] IPFS content availability: depends on pinning service
-  [⚠️] Metadata URI mutable: tokenURI can be updated by token owner
-```
-
-#### Recommendations
-
-| Priority | Finding | Recommendation |
-|----------|---------|---------------|
-| 🔴 Critical | Owner key is single point of failure | Use Gnosis Safe multisig for contract ownership |
-| 🔴 Critical | No timelock on upgrades | Add `TimelockController` before UUPS upgrade calls |
-| 🟡 Medium | `emergencyWithdraw` desyncs agent balances | Add per-agent accounting or document clearly |
-| 🟡 Medium | No event for `setFreeMintsPerUser` | Add `FreeMintConfigUpdated(uint256)` event |
-| 🟡 Medium | Logic contract not re-validated over time | Consider periodic `code.length` check or callback |
-| 🟢 Low | Unbounded loop in `tokensOfOwner` | Document gas risk for large holders; consider pagination |
-| 🟢 Low | `fundAgent` allows funding non-active agents | Consider gating behind `active` check if desired |
-
-### 4 · How can I trust it?
-
-Trust in the security audit comes from **methodology transparency**:
-
-- **Every finding maps to specific code** — line numbers, function names, modifiers.
-- **Severity is rated objectively** — Critical (fund loss), Medium (operational risk), Low (gas/UX).
-- **Mitigations are verified** — I check if the code actually implements the claimed protection.
-- **Known patterns are referenced** — OpenZeppelin standards, SWC registry, Trail of Bits guidelines.
-- **Limitations are stated** — this skill audits the BAP-578 contract only, not bound logic contracts or off-chain services.
-
-**In short:** "Trust the audit because it's reproducible. Every claim maps to code, every risk has a severity, and every limitation is disclosed."
+- Performing a security review before mainnet deployment.
+- Investigating a suspected vulnerability or anomalous behavior.
+- Reviewing access control patterns and ownership boundaries.
+- Evaluating the safety of the UUPS upgrade mechanism.
+- Assessing logic contract binding risks.
+- Verifying fund management safety (deposits, withdrawals, treasury).
+- Checking off-chain integrity mechanisms (vault hash verification).
 
 ---
 
-## Quick Security Check Commands
+## The Four Identity Questions (Security View)
+
+### 1) Who are you?
+
+The security layer validates trust boundaries and prevents loss. Security auditing for BAP-578 ensures that the contract's identity guarantees (ownership, metadata integrity, fund safety) cannot be subverted by attackers, malicious logic contracts, or administrative errors. The auditor's role is to verify that every claim the contract makes about identity, memory, capability, and trust is actually enforced.
+
+### 2) What do you remember?
+
+Security memory includes known attack patterns, prior audit findings, guard rails built into the contract, and the threat model specific to BAP-578's architecture. Key patterns to remember:
+
+- ERC-721 + custom state = larger attack surface than plain NFTs
+- UUPS proxy = upgrade risk if `_authorizeUpgrade` is not properly guarded
+- Agent balance management = reentrancy risk on withdrawals
+- Logic contract binding = external code execution risk
+- Free mint mechanics = potential for abuse if not properly constrained
+
+### 3) What can you do?
+
+Run a structured security audit that produces:
+
+- Threat model with categorized attack vectors
+- Function-by-function access control review
+- Reentrancy and CEI (Checks-Effects-Interactions) analysis
+- Upgrade safety verification
+- Fund flow analysis (deposits, withdrawals, treasury)
+- Logic contract risk assessment
+- Off-chain integrity verification review
+- Severity-rated findings with remediation steps
+
+### 4) How can I trust it?
+
+Every finding maps to a specific function, modifier, or pattern in the contract source. Findings reference line numbers, function names, and concrete attack scenarios. Trust in the audit comes from:
+
+- Reproducible analysis (anyone can verify each finding)
+- Standard severity classification (Critical/High/Medium/Low/Informational)
+- Concrete proof-of-concept descriptions for each finding
+- Clear remediation steps
+
+---
+
+## Threat Model
+
+### Attack surface overview
+
+BAP-578 combines multiple patterns that each carry specific risks:
+
+```
+┌─────────────────────────────────────────┐
+│              BAP-578 Contract            │
+├──────────┬──────────┬───────────────────┤
+│ ERC-721  │ UUPS     │ Custom State      │
+│ Standard │ Proxy    │ (Agents, Funds)   │
+├──────────┼──────────┼───────────────────┤
+│ Transfer │ Upgrade  │ Mint (free/paid)  │
+│ Approval │ Auth     │ Fund/Withdraw     │
+│ Metadata │ Storage  │ Logic binding     │
+│          │ Layout   │ Status toggle     │
+│          │          │ Metadata update   │
+└──────────┴──────────┴───────────────────┘
+         ↓              ↓
+    External actors:  Logic contracts
+    (users, attackers) (external code)
+```
+
+### Categorized threat vectors
+
+**T1: Reentrancy attacks**
+
+Target: `withdrawFromAgent` and any function that sends BNB.
+
+Attack scenario: A malicious contract calls `withdrawFromAgent`, and the fallback function re-enters the contract before state is updated. If the contract does not follow CEI pattern or use `nonReentrant`, the attacker can drain the agent's balance.
+
+Verification steps:
+1. Check that `withdrawFromAgent` uses the `nonReentrant` modifier.
+2. Verify state is updated (balance decremented) before the external call.
+3. Confirm `fundAgent` does not have re-entrancy paths.
+4. Check that the treasury withdrawal (`emergencyWithdraw`) is also protected.
+
+**T2: Access control bypass**
+
+Target: Owner-only and token-owner-only functions.
+
+Attack scenario: An attacker calls `setTreasury`, `setPaused`, `emergencyWithdraw`, or `grantAdditionalFreeMints` without being the contract owner. Or calls `withdrawFromAgent`, `setAgentStatus`, `setLogicAddress`, or `updateAgentMetadata` without being the token owner.
+
+Verification steps:
+1. List all functions with `onlyOwner` modifier.
+2. List all functions with token-owner checks (e.g., `require(ownerOf(tokenId) == msg.sender)`).
+3. Verify no function bypasses these checks.
+4. Check that `transferOwnership` is properly restricted.
+
+**T3: Malicious logic contract binding**
+
+Target: `setLogicAddress` function.
+
+Attack scenario: An attacker tricks a user into binding a malicious logic contract that steals funds or manipulates agent state. Or an attacker deploys a contract that appears safe but has a hidden backdoor.
+
+Verification steps:
+1. Confirm that only the token owner can set logic address.
+2. Verify that EOAs (externally owned accounts) are rejected.
+3. Check whether logic contracts can call back into the main contract.
+4. Assess what permissions the logic contract has.
+
+**T4: Free mint abuse**
+
+Target: `createAgent` free mint logic.
+
+Attack scenarios:
+- Sybil attack: create many wallets to claim free mints at scale.
+- Bypass self-mint restriction: find a way to mint free tokens to another address.
+- Transfer restriction bypass: find a way to transfer free-minted tokens.
+
+Verification steps:
+1. Confirm free mints require `to == msg.sender`.
+2. Verify transfer hook blocks transfers of free-minted tokens.
+3. Check that `isFreeMint` mapping is correctly set at mint time.
+4. Verify that `grantAdditionalFreeMints` is owner-only.
+
+**T5: Upgrade safety**
+
+Target: UUPS proxy mechanism.
+
+Attack scenarios:
+- Unauthorized upgrade: attacker calls `upgradeTo` or `upgradeToAndCall`.
+- Storage collision: new implementation reorders or removes state variables.
+- Initialization replay: attacker calls initializer on new implementation.
+
+Verification steps:
+1. Confirm `_authorizeUpgrade` is guarded by `onlyOwner`.
+2. Verify implementation contract disables initializers in constructor.
+3. Review storage layout for append-only discipline.
+4. Check that `reinitializer` is used for new initialization logic.
+
+**T6: Fund management risks**
+
+Target: Agent balances, treasury, and BNB flows.
+
+Attack scenarios:
+- Drain agent balance via reentrancy (see T1).
+- Treasury address set to attacker's address.
+- Emergency withdraw drains all funds.
+
+Verification steps:
+1. Trace all BNB flows: where does `msg.value` go at mint time?
+2. Verify mint fee calculation is correct.
+3. Check that treasury address changes are owner-only.
+4. Verify emergency withdraw sends funds to treasury, not caller.
+5. Confirm agent withdrawal checks balance before sending.
+
+**T7: Off-chain integrity**
+
+Target: `vaultURI` and `vaultHash`.
+
+Attack scenarios:
+- Vault content modified after hash was recorded.
+- Vault URI points to malicious content.
+- Hash collision (theoretical, not practical with keccak256).
+
+Verification steps:
+1. Verify that `vaultHash` is stored on-chain and updated with metadata updates.
+2. Confirm off-chain consumers verify hash before trusting vault content.
+3. Check that metadata update emits events for tracking.
+
+**T8: Denial of service**
+
+Target: `setPaused` and contract availability.
+
+Attack scenarios:
+- Admin key compromise leads to permanent pause.
+- Attacker spam-mints to exhaust gas limits in enumeration functions.
+
+Verification steps:
+1. Confirm pause is owner-only.
+2. Check if `tokensOfOwner` or other view functions can be DOS'd by large token counts.
+3. Verify that pause does not lock funds permanently (withdrawal should work even when paused, or there should be an emergency mechanism).
+
+**T9: Merkle tree learning integrity**
+
+Target: `vaultHash` used as Merkle root for learning agents.
+
+Attack scenarios:
+- Attacker modifies learning tree data off-chain without updating on-chain root.
+- Attacker provides fraudulent Merkle proofs with crafted sibling nodes.
+- Learning data poisoning through malicious interaction data.
+
+Verification steps:
+1. Verify that any claimed learning node can be validated via Merkle proof against the on-chain `vaultHash` root.
+2. Confirm the learning module (logic contract) validates proof integrity before accepting updates.
+3. Check that `updateAgentMetadata` correctly updates `vaultHash` when the Merkle root changes.
+4. Verify that consumers verify proofs before trusting individual learning nodes.
+
+**T10: Logic contract as learning module risks**
+
+Target: Logic contracts implementing RAG, MCP, or learning modules.
+
+Attack scenarios:
+- Logic contract routes to compromised external AI service (MCP pattern).
+- RAG logic contract retrieves poisoned vault content.
+- Learning module generates invalid Merkle roots.
+- Logic contract leaks private learning data through events or public state.
+
+Verification steps:
+1. Audit the logic contract's external service integrations.
+2. Verify that learning data is validated before being incorporated into the tree.
+3. Check that Merkle root computation matches the claimed tree structure.
+4. Ensure sensitive learning data is not exposed through public view functions.
+
+---
+
+## Audit Checklist
+
+### Access Control
+
+- [ ] `setTreasury` requires `onlyOwner`
+- [ ] `setPaused` requires `onlyOwner`
+- [ ] `emergencyWithdraw` requires `onlyOwner`
+- [ ] `grantAdditionalFreeMints` requires `onlyOwner`
+- [ ] `setFreeMintsPerUser` requires `onlyOwner`
+- [ ] `_authorizeUpgrade` requires `onlyOwner`
+- [ ] `withdrawFromAgent` requires token owner
+- [ ] `setAgentStatus` requires token owner
+- [ ] `setLogicAddress` requires token owner
+- [ ] `updateAgentMetadata` requires token owner
+- [ ] No unauthorized path to any privileged function
+
+### Reentrancy & CEI
+
+- [ ] `withdrawFromAgent` uses `nonReentrant` modifier
+- [ ] State updated before external call in `withdrawFromAgent`
+- [ ] `emergencyWithdraw` is reentrancy-safe
+- [ ] `fundAgent` correctly updates balance before any external interaction
+- [ ] No unprotected `call.value` or `transfer` patterns
+
+### Fund Safety
+
+- [ ] Mint fee sent to treasury on paid mints
+- [ ] Free mints send zero value to treasury
+- [ ] Agent balance correctly incremented on `fundAgent`
+- [ ] Agent balance correctly decremented on `withdrawFromAgent`
+- [ ] Withdrawal amount validated against balance
+- [ ] Emergency withdraw sends to treasury address only
+- [ ] No way to drain funds without proper authorization
+
+### Upgrade Safety
+
+- [ ] `_authorizeUpgrade` guarded by `onlyOwner`
+- [ ] Implementation disables initializers in constructor
+- [ ] Storage layout is append-only (no variable reordering)
+- [ ] `reinitializer` version incremented for new versions
+- [ ] Gap variables reserved for future storage expansion
+
+### Transfer Restrictions
+
+- [ ] Free-minted tokens cannot be transferred
+- [ ] `_update` or `_beforeTokenTransfer` hook enforces restriction
+- [ ] `isFreeMint` mapping set correctly at mint time
+- [ ] Paid tokens transfer normally
+
+### Logic Contract Safety
+
+- [ ] Only token owner can set logic address
+- [ ] EOA addresses rejected for logic binding
+- [ ] `address(0)` correctly unbinds logic
+- [ ] Logic contract has no callback path to drain funds
+
+### Input Validation
+
+- [ ] Metadata strings have reasonable length limits
+- [ ] Zero address checks where appropriate
+- [ ] Token ID existence validated before operations
+- [ ] Amount > 0 for funding and withdrawal
+
+---
+
+## Severity Classification
+
+**Critical** — Direct fund loss or irreversible control loss. Example: reentrancy allowing balance drain, unauthorized upgrade to malicious implementation.
+
+**High** — Significant trust or integrity failure. Example: access control bypass on admin functions, transfer restriction bypass for free mints.
+
+**Medium** — Operational risk or unsafe defaults. Example: missing events for state changes, no pause on critical functions during emergency.
+
+**Low** — Gas optimization, UX issues, or missing convenience features. Example: unbounded loop in view function, missing input validation on non-critical fields.
+
+**Informational** — Best practice recommendations, code quality notes, documentation gaps.
+
+---
+
+## Automated Security Tools
+
+### Static analysis with Slither
 
 ```bash
-# Run the full test suite (should all pass)
-cd non-fungible-agents-BAP-578
-npm test
-
-# Check test coverage
-npm run coverage
-
-# Lint Solidity for style/security hints
-npm run lint
-
-# Static analysis with Slither (if installed)
-slither contracts/BAP578.sol --config-file slither.config.json
-
-# Check contract size (must be < 24KB for deployment)
-npm run size
+pip install slither-analyzer
+slither contracts/NonFungibleAgents.sol --config-file slither.config.json
 ```
+
+Key detectors relevant to BAP-578:
+- `reentrancy-eth` — reentrancy on BNB transfers
+- `unprotected-upgrade` — missing `_authorizeUpgrade` guard
+- `unchecked-transfer` — missing return value check on calls
+- `controlled-delegatecall` — delegatecall to user-controlled address
+- `arbitrary-send-eth` — unauthorized BNB transfers
+
+### Formal verification with Certora
+
+For critical deployments, write formal verification rules:
+
+```
+rule withdrawPreservesInvariant {
+    env e;
+    uint256 tokenId;
+    uint256 amount;
+    
+    uint256 balanceBefore = getAgentState(tokenId).balance;
+    withdrawFromAgent(e, tokenId, amount);
+    uint256 balanceAfter = getAgentState(tokenId).balance;
+    
+    assert balanceAfter == balanceBefore - amount;
+}
+```
+
+### Gas griefing analysis
+
+Check that no function can be griefed by sending excessive gas or triggering out-of-gas:
+- `tokensOfOwner` with a user holding many tokens
+- `emergencyWithdraw` with large contract balance
+- `createAgent` with very long metadata strings
+
+---
+
+## Common Vulnerability Patterns
+
+### Pattern: Unchecked return values
+
+Solidity `call` returns a boolean. If not checked, failed transfers silently succeed in the contract's view.
+
+```solidity
+// VULNERABLE
+(bool success, ) = payable(owner).call{value: amount}("");
+// Missing: require(success, "Transfer failed");
+```
+
+### Pattern: Front-running
+
+If mint fees or free mint allocations can be observed in the mempool, attackers may front-run to claim free mints or manipulate pricing.
+
+Mitigation: Free mint allocation is per-address and checked on-chain, so front-running is limited. However, if dynamic pricing is added, commit-reveal patterns may be needed.
+
+### Pattern: Integer overflow/underflow
+
+Solidity 0.8+ has built-in overflow checks. Verify the contract uses Solidity >= 0.8.0. If using `unchecked` blocks, verify arithmetic safety manually.
+
+---
+
+## Audit Report Template
+
+```
+BAP-578 Security Audit Report
+══════════════════════════════
+Date:       YYYY-MM-DD
+Auditor:    [name/team]
+Commit:     [git hash]
+Scope:      NonFungibleAgents.sol + dependencies
+
+Summary
+───────
+Critical:    0
+High:        0
+Medium:      0
+Low:         0
+Informational: 0
+
+Findings
+────────
+[ID] [Severity] [Title]
+  Location: [contract]:[function]:[line]
+  Description: [what was found]
+  Impact: [what could happen]
+  Recommendation: [how to fix]
+  Status: [open/fixed/acknowledged]
+
+Conclusion
+──────────
+[overall assessment and deployment recommendation]
+```
+
+---
+
+## Output Format
+
+When asked to audit BAP-578, respond with:
+
+1. **Scope** (what was reviewed)
+2. **Summary of findings** (critical/high/medium/low counts)
+3. **Detailed findings** with function names, severity, and reasoning
+4. **Recommended fixes** for each finding
+5. **Residual risks** that cannot be fully mitigated
+6. **Deployment recommendation** (proceed / fix first / do not deploy)
 
 ---
 
 ## Related Skills
 
-- **`bap578`** — Core contract spec, build/test/deploy workflows
-- **`bap578-scanner`** — Runtime verification and agent-level trust checks
-- **`bap578-upgrade`** — Safe upgrade procedures and state migration
+- `bap578`
+- `bap578-upgrade`
+- `bap578-scanner`
