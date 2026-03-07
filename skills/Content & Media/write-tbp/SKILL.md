@@ -3,7 +3,7 @@ category: Content & Media
 id: write-tbp
 name: Write Tbp
 description: Writing technical blog posts about tldraw features and implementation details.
-requires: []
+requires: ["text"]
 examples:
   - "Write a technical blog post draft about tldraw's arrow routing implementation based on this research."
   - "Help me research and outline a blog post about tldraw's scribbles feature, grounded in the codebase."

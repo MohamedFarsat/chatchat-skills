@@ -4,8 +4,7 @@ category: Content & Media
 author: openclaw
 name: Songsee
 description: Generate spectrograms and feature-panel visualizations from audio with the songsee CLI.
-requires:
-  - songsee
+requires: [".mp3", ".wav", ".flac", ".m4a"]
 examples:
   - "Generate a spectrogram for track.mp3 and save it as a PNG."
   - "Create a multi-panel visualization (spectrogram + mfcc + chroma) for this audio file."

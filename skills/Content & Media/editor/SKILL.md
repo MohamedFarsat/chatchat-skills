@@ -5,7 +5,7 @@ name: Editor
 description: Professional editing and proofreading for clarity, grammar, style, and readability.
 author: awesome-llm-apps
 version: "1.0.0"
-requires: []
+requires: ["text"]
 examples:
   - "Proofread and edit this document for clarity and grammar without changing the meaning."
   - "Revise this paragraph to be more concise and professional, and explain the key changes."

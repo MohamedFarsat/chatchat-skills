@@ -4,9 +4,7 @@ category: Content & Media
 author: openclaw
 name: Camsnap
 description: Capture frames or clips from RTSP/ONVIF cameras.
-requires:
-  - camsnap
-  - ffmpeg
+requires: ["rtsp url"]
 examples:
   - "Capture a snapshot from my RTSP camera and save it to shot.jpg."
   - "Record a 5-second clip from the 'kitchen' camera and save it to clip.mp4."

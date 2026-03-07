@@ -4,8 +4,7 @@ category: Content & Media
 author: openclaw
 name: Gifgrep
 description: Search GIF providers with CLI/TUI, download results, and extract stills/sheets.
-requires:
-  - gifgrep
+requires: ["search query"]
 examples:
   - "Search for 'office handshake' GIFs, show the top 5 results, and download the best one."
   - "From this GIF, extract a still at 1.5s and also generate a 3x3 sheet PNG."

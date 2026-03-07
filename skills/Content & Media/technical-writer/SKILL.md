@@ -5,7 +5,7 @@ name: Technical Writer
 description: Write clear documentation, READMEs, API references, tutorials, and user guides for technical products.
 author: awesome-llm-apps
 version: "1.0.0"
-requires: []
+requires: ["text"]
 examples:
   - "Draft a README for this project with installation, quickstart, and common usage examples."
   - "Write API documentation for these endpoints, including request/response examples and error cases."

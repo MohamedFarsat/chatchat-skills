@@ -3,7 +3,7 @@ id: xlsx
 name: XLSX
 description: Create, edit, and audit .xlsx files with financial-modeling conventions and zero formula errors.
 category: Business
-requires: []
+requires: [".xlsx"]
 examples:
   - "Audit this workbook for #REF!/#DIV/0! errors and fix formulas while preserving formatting."
   - "Build a simple financial model in Excel following blue/black/green conventions and validate there are zero formula errors."
