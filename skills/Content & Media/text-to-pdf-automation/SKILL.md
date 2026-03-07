@@ -5,9 +5,7 @@ name: Canva
 version: 1.0.0
 description: Manage Canva designs, assets, exports, and folders via the Canva Connect API.
 author: clawdbot
-requires:
-  - env:CANVA_CLIENT_ID
-  - env:CANVA_CLIENT_SECRET
+requires: ["canva design id"]
 examples:
   - "List my Canva designs in the 'Marketing' folder and export the latest one as a PDF."
   - "Create a new Canva design from a template, autofill it with this data, and export as PNG."

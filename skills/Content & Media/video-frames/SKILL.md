@@ -4,8 +4,7 @@ category: Content & Media
 author: openclaw
 name: Video Frames
 description: Extract frames or short clips from videos using ffmpeg.
-requires:
-  - ffmpeg
+requires: [".mp4", ".mov", ".mkv", ".webm"]
 examples:
   - "Extract a frame at 00:00:10 from video.mp4 and save it as frame-10s.jpg."
   - "Generate 12 evenly spaced thumbnail frames from this video and save them to ./thumbs/."

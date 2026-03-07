@@ -5,7 +5,7 @@ name: Content Creator
 description: Create blog posts, social media content, and marketing copy with audience focus, strong hooks, and clear calls to action.
 author: awesome-llm-apps
 version: "1.0.0"
-requires: []
+requires: ["text"]
 examples:
   - "Write a LinkedIn post announcing our new feature, with a strong hook and a clear CTA."
   - "Draft a 1,200-word blog post outline and introduction about benefits of customer onboarding."

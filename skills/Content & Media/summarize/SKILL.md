@@ -4,8 +4,7 @@ category: Content & Media
 author: openclaw
 name: Summarize
 description: Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for “transcribe this YouTube/video”).
-requires:
-  - summarize
+requires: ["url", "document"]
 examples:
   - "Summarize this URL in 10 bullet points: https://example.com"
   - "Extract the transcript from this YouTube link and then summarize the key points."

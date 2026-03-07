@@ -4,9 +4,7 @@ category: Content & Media
 author: openclaw
 name: Nano Banana Pro
 description: Step-by-step guidance for nano banana pro.
-requires:
-  - uv
-  - env:GEMINI_API_KEY
+requires: ["prompt", ".png", ".jpg", ".jpeg", ".webp","loom url"]
 examples:
   - "Generate an image with this prompt and save it as output.png at 2K resolution."
   - "Edit this image to remove the background and save as transparent webp: input.png"
