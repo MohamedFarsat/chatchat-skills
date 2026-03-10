@@ -4,25 +4,10 @@ category: Content & Media
 author: openclaw
 name: Camsnap
 description: Capture frames or clips from RTSP/ONVIF cameras.
-homepage: https://camsnap.ai
-metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "📸",
-        "requires": { "bins": ["camsnap"] },
-        "install":
-          [
-            {
-              "id": "brew",
-              "kind": "brew",
-              "formula": "steipete/tap/camsnap",
-              "bins": ["camsnap"],
-              "label": "Install camsnap (brew)",
-            },
-          ],
-      },
-  }
+requires: ["rtsp url"]
+examples:
+  - "Capture a snapshot from my RTSP camera and save it to shot.jpg."
+  - "Record a 5-second clip from the 'kitchen' camera and save it to clip.mp4."
 ---
 
 # camsnap

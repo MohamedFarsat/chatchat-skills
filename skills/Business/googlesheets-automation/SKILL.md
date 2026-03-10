@@ -1,10 +1,13 @@
 ---
-category: Content & Media
 id: googlesheets-automation
 name: Google Sheets Automation
-description: Step-by-step guidance for google sheets automation.
+description: Automate Google Sheets workflows (read/write, tabs, formatting, filtering, upserts) via Rube MCP.
+category: Business
 requires:
-  mcp: [rube]
+  - mcp:rube
+examples:
+  - "Update a Google Sheet by upserting rows keyed by Email, then apply a basic filter for active users."
+  - "Create a new spreadsheet, add a tab, and batch update a bounded range with these rows."
 ---
 
 # Google Sheets Automation via Rube MCP

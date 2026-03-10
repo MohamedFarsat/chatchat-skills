@@ -1,9 +1,12 @@
 ---
 id: xlsx
-category: Content & Media
 name: XLSX
-description: Step-by-step guidance for xlsx.
-license: Proprietary. LICENSE.txt has complete terms
+description: Create, edit, and audit .xlsx files with financial-modeling conventions and zero formula errors.
+category: Business
+requires: [".xlsx"]
+examples:
+  - "Audit this workbook for #REF!/#DIV/0! errors and fix formulas while preserving formatting."
+  - "Build a simple financial model in Excel following blue/black/green conventions and validate there are zero formula errors."
 ---
 
 # Requirements for Outputs

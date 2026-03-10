@@ -1,8 +1,12 @@
 ---
-category: Content & Media
 id: invoice-organizer
 name: Invoice Organizer
-description: Automatically organizes invoices and receipts for tax preparation by reading messy files, extracting key information, renaming them consistently, and sorting them into logical folders. Turns hours of manual bookkeeping into minutes of automated organization.
+description: Organize invoices and receipts for tax prep by extracting key fields, renaming files, and producing an accountant-ready CSV.
+category: Business
+requires: []
+examples:
+  - "Organize these invoices for taxes: extract date/vendor/amount, rename consistently, and sort into year/category folders."
+  - "Extract vendor, date, and total from these receipts and generate a CSV summary for my accountant."
 ---
 
 # Invoice Organizer

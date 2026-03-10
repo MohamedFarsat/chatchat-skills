@@ -3,6 +3,10 @@ category: Content & Media
 id: content-research-writer
 name: Content Research Writer
 description: Assists in writing high-quality content by conducting research, adding citations, improving hooks, iterating on outlines, and providing real-time feedback on each section. Transforms your writing process from solo effort to collaborative partnership.
+requires: ["text"]
+examples:
+  - "Help me outline and draft a newsletter about AI safety, with citations and section-by-section feedback."
+  - "Research this topic, add reputable citations, and strengthen the intro hook for my article draft."
 ---
 
 # Content Research Writer

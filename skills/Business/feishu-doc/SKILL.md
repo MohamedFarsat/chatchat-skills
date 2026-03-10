@@ -1,10 +1,13 @@
 ---
 id: feishu-doc
-category: Content & Media
 author: openclaw
 name: Feishu Doc
-description: Guidance and answers for feishu doc.
-  Feishu document read/write operations. Activate when user mentions Feishu docs, cloud docs, or docx links.
+description: Feishu doc read/write operations via the feishu_doc tool (read, write, append, create, and block APIs).
+category: Business
+requires: []
+examples:
+  - "Read this Feishu doc and summarize key action items: https://xxx.feishu.cn/docx/ABC123def"
+  - "Append this update to our Feishu doc: <doc_url> (include a header and bullet points)"
 ---
 
 # Feishu Document Tool

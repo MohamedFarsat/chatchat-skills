@@ -1,15 +1,14 @@
 ---
 id: email-drafter
-category: Content & Media
 name: Email Drafter
-description: Guidance and answers for email drafter.
-  Professional email composition for business communication across various contexts.
-  Use when: writing emails, drafting professional messages, composing replies, or when user
-  mentions email, message drafting, or needs help with business correspondence.
-license: MIT
-metadata:
-  author: awesome-llm-apps
-  version: "1.0.0"
+description: Draft professional business emails (requests, follow-ups, sensitive messages) with clear structure, tone, and calls to action.
+category: Business
+author: awesome-llm-apps
+version: "1.0.0"
+requires: []
+examples:
+  - "Draft a professional follow-up email after an interview and ask about next steps."
+  - "Write a concise but firm email to a vendor about a late deliverable and revised timeline."
 ---
 
 # Email Drafter

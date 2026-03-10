@@ -3,12 +3,10 @@ category: Content & Media
 id: web-fetch
 name: Web Fetch
 description: Fetch and extract readable content from web pages. Use for lightweight page access without browser automation.
-homepage: https://github.com/zhayujie/chatgpt-on-wechat
-metadata:
-  emoji: 🌐
-  requires:
-    bins: ["curl"]
-  always: true
+requires: ["url"]
+examples:
+  - "Fetch this URL and extract the readable text content: https://example.com"
+  - "Download this page and save the extracted text to output.txt: https://example.com"
 ---
 
 # Web Fetch

@@ -3,6 +3,10 @@ category: Content & Media
 id: image-enhancer
 name: Image Enhancer
 description: Improves the quality of images, especially screenshots, by enhancing resolution, sharpness, and clarity. Perfect for preparing images for presentations, documentation, or social media posts.
+requires: [".png", ".jpg", ".jpeg", ".webp", ".gif"]
+examples:
+  - "Upscale this screenshot to 4K and improve text clarity without introducing artifacts."
+  - "Enhance all PNGs in this folder for a presentation and keep file sizes reasonable."
 ---
 
 # Image Enhancer

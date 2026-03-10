@@ -2,15 +2,13 @@
 id: technical-writer
 category: Content & Media
 name: Technical Writer
-description: Step-by-step guidance for technical.
-  Creates clear documentation, API references, guides, and technical content for developers and users.
-  Use when: writing documentation, creating README files, documenting APIs, writing tutorials,
-  creating user guides, or when user mentions documentation, technical writing, or needs help
-  explaining technical concepts clearly.
-license: MIT
-metadata:
-  author: awesome-llm-apps
-  version: "1.0.0"
+description: Write clear documentation, READMEs, API references, tutorials, and user guides for technical products.
+author: awesome-llm-apps
+version: "1.0.0"
+requires: ["text"]
+examples:
+  - "Draft a README for this project with installation, quickstart, and common usage examples."
+  - "Write API documentation for these endpoints, including request/response examples and error cases."
 ---
 
 # Technical Writer

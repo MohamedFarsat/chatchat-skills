@@ -3,7 +3,10 @@ id: canvas-design
 category: Content & Media
 name: Canvas Design
 description: Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.
-license: Complete terms in LICENSE.txt
+requires: ["text"]
+examples:
+  - "Create a minimalist poster design for a local jazz night and export as a PNG."
+  - "Design a one-page PDF flyer for a community event with a strong visual concept and minimal text."
 ---
 
 These are instructions for creating design philosophies - aesthetic movements that are then EXPRESSED VISUALLY. Output only .md files, .pdf files, and .png files.

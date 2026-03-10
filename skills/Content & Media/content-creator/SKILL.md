@@ -2,15 +2,13 @@
 id: content-creator
 category: Content & Media
 name: Content Creator
-description: Write content creator content from the user's input.
-  Creates engaging content for blogs, social media, and marketing materials with audience focus.
-  Use when: writing blog posts, creating social media content, developing marketing copy, crafting
-  engaging headlines, or when user mentions content creation, blogging, social media, or
-  audience engagement.
-license: MIT
-metadata:
-  author: awesome-llm-apps
-  version: "1.0.0"
+description: Create blog posts, social media content, and marketing copy with audience focus, strong hooks, and clear calls to action.
+author: awesome-llm-apps
+version: "1.0.0"
+requires: ["text"]
+examples:
+  - "Write a LinkedIn post announcing our new feature, with a strong hook and a clear CTA."
+  - "Draft a 1,200-word blog post outline and introduction about benefits of customer onboarding."
 ---
 
 # Content Creator

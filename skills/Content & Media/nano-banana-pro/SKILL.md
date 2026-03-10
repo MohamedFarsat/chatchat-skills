@@ -4,26 +4,10 @@ category: Content & Media
 author: openclaw
 name: Nano Banana Pro
 description: Step-by-step guidance for nano banana pro.
-homepage: https://ai.google.dev/
-metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "🍌",
-        "requires": { "bins": ["uv"], "env": ["GEMINI_API_KEY"] },
-        "primaryEnv": "GEMINI_API_KEY",
-        "install":
-          [
-            {
-              "id": "uv-brew",
-              "kind": "brew",
-              "formula": "uv",
-              "bins": ["uv"],
-              "label": "Install uv (brew)",
-            },
-          ],
-      },
-  }
+requires: ["prompt", ".png", ".jpg", ".jpeg", ".webp","loom url"]
+examples:
+  - "Generate an image with this prompt and save it as output.png at 2K resolution."
+  - "Edit this image to remove the background and save as transparent webp: input.png"
 ---
 
 # Nano Banana Pro (Gemini 3 Pro Image)

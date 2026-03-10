@@ -3,36 +3,12 @@ category: Content & Media
 id: text-to-pdf-automation
 name: Canva
 version: 1.0.0
-description: Guidance and answers for canva.
-  Manage Canva designs, assets, and folders via the Connect API.
-  
-  WHAT IT CAN DO:
-  - List/search/organize designs and folders
-  - Export finished designs (PNG/PDF/JPG)
-  - Upload images to asset library
-  - Autofill brand templates with data
-  - Create blank designs (doc/presentation/whiteboard/custom)
-  
-  WHAT IT CANNOT DO:
-  - Add content to designs (text, shapes, elements)
-  - Edit existing design content
-  - Upload documents (images only)
-  - AI design generation
-  
-  Best for: asset pipelines, export automation, organization, template autofill.
-  Triggers: /canva, "upload to canva", "export design", "list my designs", "canva folder".
+description: Manage Canva designs, assets, exports, and folders via the Canva Connect API.
 author: clawdbot
-license: MIT
-metadata:
-  clawdbot:
-    emoji: "🎨"
-    triggers: ["/canva"]
-    requires:
-      env:
-        - CANVA_CLIENT_ID
-        - CANVA_CLIENT_SECRET
-    primaryEnv: CANVA_CLIENT_ID
-    homepage: https://canva.dev/docs/connect/
+requires: ["canva design id"]
+examples:
+  - "List my Canva designs in the 'Marketing' folder and export the latest one as a PDF."
+  - "Create a new Canva design from a template, autofill it with this data, and export as PNG."
 ---
 
 # Canva Connect

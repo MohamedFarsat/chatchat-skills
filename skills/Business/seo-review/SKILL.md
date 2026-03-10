@@ -1,8 +1,12 @@
 ---
 id: seo-review
-category: Content & Media
 name: Seo Review
 description: Perform a focused SEO audit on JavaScript concept pages to maximize search visibility, featured snippet optimization, and ranking potential.
+category: Business
+requires: []
+examples:
+  - "Audit this concept page for SEO and produce a prioritized fix list to improve rankings."
+  - "Optimize this page to win a featured snippet for the query 'what is X in JavaScript'."
 ---
 
 # Skill: SEO Audit for Concept Pages

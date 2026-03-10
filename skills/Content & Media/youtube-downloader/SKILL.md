@@ -3,6 +3,10 @@ category: Content & Media
 id: youtube-downloader
 name: Youtube Downloader
 description: Download YouTube videos with customizable quality and format options. Use this skill when the user asks to download, save, or grab YouTube videos. Supports various quality settings (best, 1080p, 720p, 480p, 360p), multiple formats (mp4, webm, mkv), and audio-only downloads as MP3.
+requires: ["youtube url"]
+examples:
+  - "Download this YouTube video in 1080p MP4: https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  - "Download audio-only as MP3 from this link and save it to ./out/: https://youtu.be/dQw4w9WgXcQ"
 ---
 
 # YouTube Video Downloader

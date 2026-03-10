@@ -4,7 +4,10 @@ category: Content & Media
 author: n8n-io
 name: Loom Transcript
 description: Fetch and display the full transcript from a Loom video URL.
-argument-hint: [loom-url]
+requires: ["loom url"]
+examples:
+  - "Get the full transcript for this Loom video: https://www.loom.com/share/<video-id>"
+  - "Fetch the transcript and return it with timestamps for https://www.loom.com/embed/<video-id>"
 ---
 
 # Loom Transcript Fetcher
